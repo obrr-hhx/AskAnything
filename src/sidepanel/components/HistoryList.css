@@ -1,0 +1,116 @@
+.history-container {
+  margin-top: 20px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.toggle-history-btn {
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-color);
+  cursor: pointer;
+}
+
+.toggle-history-btn:hover {
+  background-color: var(--hover-color);
+}
+
+.history-search {
+  display: flex;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.history-search input {
+  flex: 1;
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  font-size: 12px;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+.history-search button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 16px;
+  padding: 0 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.history-loading,
+.history-empty {
+  text-align: center;
+  padding: 16px;
+  color: var(--border-color);
+  font-style: italic;
+}
+
+.history-item {
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-item:hover {
+  background-color: var(--hover-color);
+  border-color: var(--primary-color);
+}
+
+.history-item-preview {
+  font-size: 13px;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-item-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--border-color);
+}
+
+.history-item-model {
+  font-weight: 500;
+  color: var(--primary-color);
+}
+
+.clear-history-btn {
+  background-color: rgba(255, 59, 48, 0.1);
+  color: rgb(255, 59, 48);
+  border: 1px solid rgba(255, 59, 48, 0.2);
+  border-radius: 16px;
+  padding: 6px 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  align-self: center;
+}
+
+.clear-history-btn:hover {
+  background-color: rgba(255, 59, 48, 0.2);
+} 

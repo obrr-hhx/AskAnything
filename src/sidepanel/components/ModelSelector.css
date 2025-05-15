@@ -1,0 +1,103 @@
+.model-selector {
+  display: flex;
+  flex-direction: column;
+  margin: 10px 0;
+  padding: 0 15px;
+}
+
+.model-select {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: #f9f9f9;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+.model-select:focus {
+  border-color: #4285f4;
+}
+
+.model-select option {
+  padding: 8px;
+}
+
+.model-options {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 思考模式开关样式 */
+.thinking-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.thinking-toggle input[type="checkbox"] {
+  margin-right: 6px;
+  cursor: pointer;
+}
+
+/* MCP模式开关样式 */
+.mcp-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.mcp-toggle input[type="checkbox"] {
+  margin-right: 6px;
+  cursor: pointer;
+}
+
+.mcp-toggle span {
+  color: #2c6ecf;
+  font-weight: 500;
+}
+
+.mcp-toggle input:disabled + span {
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* 深色模式 */
+@media (prefers-color-scheme: dark) {
+  .model-select {
+    background-color: #2a2a2a;
+    border-color: #444;
+    color: #e0e0e0;
+  }
+  
+  .model-select:focus {
+    border-color: #8ab4f8;
+  }
+  
+  .thinking-toggle span,
+  .mcp-toggle span {
+    color: #e0e0e0;
+  }
+  
+  .mcp-toggle span {
+    color: #8ab4f8;
+  }
+  
+  .mcp-toggle input:disabled + span {
+    color: #666;
+  }
+}
+
+/* 响应式调整 */
+@media (max-width: 480px) {
+  .model-selector {
+    padding: 0 10px;
+  }
+}
+
+.loading-indicator {
+  font-size: 11px;
+  color: var(--border-color);
+  font-style: italic;
+  margin-left: 4px;
+} 

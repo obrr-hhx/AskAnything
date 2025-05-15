@@ -1,0 +1,1441 @@
+import { AIModel, MODEL_CONFIG, DEFAULT_ENDPOINTS, APIProvider} from './models/config';
+import { 
+  createDeepSeekClient, streamDeepSeekCompletion, 
+  createQwenClient, streamQwenCompletion,
+  createOpenAIClient, streamOpenAICompletion,
+  createAnthropicClient, streamAnthropicCompletion
+} from './shared/api-clients';
+import { MCPClient, MCPServer} from './shared/mcp-client';
+import { CustomToolExecutor, customTools, ToolResponse } from './shared/custom-tools';
+import { v4 as uuidv4 } from 'uuid';
+
+// 存储等待用户回答的AI问题
+interface PendingAIQuestion {
+  question: string;
+  toolCallId: string;
+  functionName: string;
+}
+
+// 用于存储等待用户回答的问题
+const pendingAIQuestions: Record<string, PendingAIQuestion> = {};
+
+// 当扩展首次安装或更新时触发
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('[ServiceWorker] 扩展已安装或更新');
+  
+  // 注册上下文菜单
+  try {
+    chrome.contextMenus.create({
+      id: 'askAI',
+      title: 'AskAnything: %s',
+      contexts: ['selection']
+    });
+    console.log('[ServiceWorker] 上下文菜单已注册');
+  } catch (error) {
+    console.error('[ServiceWorker] 注册上下文菜单失败:', error);
+  }
+
+  // 初始化存储（默认设置）
+  chrome.storage.sync.get('preferredModel', (result) => {
+    console.log('[ServiceWorker] 获取首选模型:', result);
+    if (!result.preferredModel) {
+      chrome.storage.sync.set({ preferredModel: 'chatgpt' }, () => {
+        console.log('[ServiceWorker] 已设置默认模型为 chatgpt');
+        if (chrome.runtime.lastError) {
+          console.error('[ServiceWorker] 设置默认模型出错:', chrome.runtime.lastError);
+        }
+      });
+    }
+  });
+});
+
+// 监听上下文菜单点击
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  console.log('[ServiceWorker] 上下文菜单被点击:', info);
+  if (info.menuItemId === 'askAI' && tab?.id) {
+    try {
+      // 打开侧边栏并传递所选文本
+      chrome.sidePanel.open({ tabId: tab.id });
+      console.log('[ServiceWorker] 已打开侧边栏');
+      
+      // 延迟发送消息确保侧边栏已加载
+      setTimeout(() => {
+        try {
+          chrome.runtime.sendMessage({
+            type: 'CONTEXT_SELECTION',
+            text: info.selectionText
+          }, (response) => {
+            console.log('[ServiceWorker] 选择文本消息响应:', response);
+            if (chrome.runtime.lastError) {
+              console.error('[ServiceWorker] 发送选择文本出错:', chrome.runtime.lastError);
+            }
+          });
+        } catch (error) {
+          console.error('[ServiceWorker] 发送选择文本消息失败:', error);
+        }
+      }, 500);
+    } catch (error) {
+      console.error('[ServiceWorker] 打开侧边栏失败:', error);
+    }
+  }
+});
+
+// 获取API配置
+async function getApiConfig(model: AIModel) {
+  try {
+    // 检查模型是否有效
+    if (!model || !MODEL_CONFIG[model]) {
+      console.error(`[ServiceWorker] 无效的模型: ${model}`);
+      throw new Error(`无效的模型: ${model}`);
+    }
+  
+    const modelConfig = MODEL_CONFIG[model];
+    const provider = modelConfig.provider;
+    
+    console.log(`[ServiceWorker] 为模型 ${model} 获取API配置, 提供商: ${provider}`);
+    
+    try {
+      // 获取API密钥和端点
+      console.log(`[ServiceWorker] 从存储中获取API密钥和端点...`);
+      const data = await chrome.storage.local.get(['apiKeys', 'apiEndpoints']);
+      const apiKeys = data.apiKeys || {};
+      const apiEndpoints = data.apiEndpoints || {};
+      
+      console.log(`[ServiceWorker] API密钥检查 (${provider}):`, {
+        exists: !!apiKeys[provider],
+        keyLength: apiKeys[provider] ? apiKeys[provider].length : 0,
+        endpointConfigured: !!apiEndpoints[provider]
+      });
+      
+      // 检查是否有该提供者的API密钥
+      if (!apiKeys[provider]) {
+        console.error(`[ServiceWorker] 未找到${provider}的API密钥`);
+        throw new Error(`未找到${provider}的API密钥，请在选项页面设置`);
+      }
+      
+      // API密钥基本格式验证
+      if (provider === 'openai' && !apiKeys[provider].startsWith('sk-')) {
+        console.warn('[ServiceWorker] OpenAI API密钥格式似乎不正确，通常应以sk-开头');
+      }
+      
+      if (provider === 'deepseek' && !apiKeys[provider].startsWith('sk-')) {
+        console.warn('[ServiceWorker] DeepSeek API密钥格式似乎不正确，正常应以sk-开头');
+      }
+      
+      // 确定API端点
+      const endpoint = apiEndpoints[provider] || DEFAULT_ENDPOINTS[provider] || '';
+      console.log(`[ServiceWorker] 使用API端点: ${endpoint || '(默认端点)'}`);
+      
+      return {
+        apiKey: apiKeys[provider],
+        endpoint,
+        modelName: modelConfig.model,
+        provider
+      };
+    } catch (error: any) {
+      console.error(`[ServiceWorker] 获取${model}的API配置失败:`, error);
+      throw error;
+    }
+  } catch (error: any) {
+    console.error(`[ServiceWorker] 获取API配置过程中出错:`, error);
+    throw new Error(`获取API配置失败: ${error.message}`);
+  }
+}
+
+// 处理流式响应
+async function handleStreamingResponse(model: AIModel, question: string, context: any = null, _sender: chrome.runtime.MessageSender, _callback: (response: any) => void) {
+  console.log('[ServiceWorker] 开始处理流式响应, 模型:', model, '问题长度:', question.length);
+  let responseStreamId = Date.now().toString();
+  let abortController: AbortController | null = null;
+  
+  try {
+    // 检查问题是否为空
+    if (!question || question.trim() === '') {
+      throw new Error('问题内容为空');
+    }
+    
+    // 获取API配置
+    console.log('[ServiceWorker] 正在获取API配置...');
+    const apiConfig = await getApiConfig(model);
+    
+    // 详细记录API配置信息（隐藏API密钥细节）
+    console.log(`[ServiceWorker] API配置检查:`, {
+      provider: apiConfig.provider,
+      modelName: apiConfig.modelName,
+      hasApiKey: !!apiConfig.apiKey,
+      apiKeyPrefix: apiConfig.apiKey ? apiConfig.apiKey.substring(0, 5) + '...' : 'undefined',
+      endpoint: apiConfig.endpoint || 'default endpoint',
+      // 记录是否启用思考模式
+      enableThinking: context?.enableThinking
+    });
+    
+    // 记录请求的提供商和模型
+    console.log(`[ServiceWorker] 使用API提供商: ${apiConfig.provider}, 模型: ${apiConfig.modelName}`);
+    
+    // 创建自己的STREAM_START消息，而不是通过callback
+    chrome.runtime.sendMessage({
+      type: 'STREAM_START',
+      id: responseStreamId,
+      responseStreamId: responseStreamId
+    });
+    console.log('[ServiceWorker] 已发送流开始标记');
+    
+    // 创建AbortController
+    abortController = new AbortController();
+    
+    // 记录请求信息到activeStreams
+    activeStreams[responseStreamId] = {
+      abortController,
+      model,
+      timestamp: Date.now()
+    };
+    
+    // 构建系统消息
+    let systemMessage = '你是AskAnything, 一个有帮助的AI助手。主要职责是帮助用户更高效的学习，回答用户的问题。';
+    if (context) {
+      if (context.text) {
+        systemMessage += `用户选择的文本是: "${context.text}". `;
+      }
+      if (context.url && context.title) {
+        systemMessage += `当前网页是: ${context.title} (${context.url}). `;
+      }
+    }
+    
+    // 构建消息数组
+    const messages = [
+      { role: 'system', content: systemMessage },
+      { role: 'user', content: question }
+    ];
+    
+    // 根据提供商处理请求
+    switch (apiConfig.provider) {
+      case 'openai': {
+        console.log('[ServiceWorker] 使用OpenAI SDK处理请求');
+        try {
+          // 创建OpenAI客户端
+          const openaiClient = createOpenAIClient(apiConfig.apiKey, apiConfig.endpoint);
+          console.log('[ServiceWorker] OpenAI客户端创建成功');
+          
+          // 发送请求并处理流式响应
+          const stream = await streamOpenAICompletion(
+            openaiClient,
+            messages,
+            apiConfig.modelName,
+            { signal: abortController.signal }
+          );
+          
+          // 处理流式响应
+          let fullText = '';
+          for await (const chunk of stream) {
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content) {
+              fullText += content;
+              chrome.runtime.sendMessage({
+                type: 'ANSWER_TOKEN',
+                token: content,
+                responseStreamId: responseStreamId
+              });
+            }
+          }
+          
+          // 流结束
+          console.log('[ServiceWorker] OpenAI流响应完成, 总长度:', fullText.length);
+          chrome.runtime.sendMessage({
+            type: 'STREAM_END',
+            text: fullText,
+            responseStreamId: responseStreamId
+          });
+        } catch (error: any) {
+          console.error('[ServiceWorker] OpenAI请求失败:', error);
+          if (error.response) {
+            try {
+              const errorText = await error.response.text();
+              console.error('- API响应错误:', errorText);
+            } catch (e) {
+              console.error('- 无法读取API响应:', e);
+            }
+          }
+          throw error;
+        }
+        break;
+      }
+      
+      case 'anthropic': {
+        console.log('[ServiceWorker] 处理Anthropic请求');
+        try {
+          // 创建Anthropic客户端
+          const anthropicClient = createAnthropicClient(apiConfig.apiKey, apiConfig.endpoint);
+          console.log('[ServiceWorker] Anthropic客户端创建成功');
+          
+          // 发送请求
+          const response = await streamAnthropicCompletion(
+            anthropicClient,
+            systemMessage,
+            question,
+            apiConfig.modelName,
+            { signal: abortController.signal }
+          );
+          
+          // 处理流式响应
+          if (!response.body) {
+            throw new Error('Anthropic API响应没有内容');
+          }
+          
+          // 处理SSE流响应
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let fullText = '';
+          
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+                
+                try {
+                  const parsedData = JSON.parse(data);
+                  const content = parsedData.delta?.text || '';
+                  
+                  if (content) {
+                    fullText += content;
+                    // 发送部分响应
+                    chrome.runtime.sendMessage({
+                      type: 'ANSWER_TOKEN',
+                      token: content,
+                      responseStreamId: responseStreamId
+                    });
+                  }
+                } catch (error) {
+                  console.error('[ServiceWorker] 解析Anthropic流响应出错:', error);
+                }
+              }
+            }
+          }
+          
+          // 流结束
+          console.log('[ServiceWorker] Anthropic流响应完成, 总长度:', fullText.length);
+          chrome.runtime.sendMessage({
+            type: 'STREAM_END',
+            text: fullText,
+            responseStreamId: responseStreamId
+          });
+        } catch (error: any) {
+          console.error('[ServiceWorker] Anthropic请求失败:', error);
+          throw error;
+        }
+        break;
+      }
+      
+      case 'deepseek': {
+        console.log('[ServiceWorker] 使用OpenAI SDK处理DeepSeek请求');
+        try {
+          // 使用工厂函数创建DeepSeek客户端
+          const deepseekClient = createDeepSeekClient(apiConfig.apiKey, apiConfig.endpoint);
+          console.log('[ServiceWorker] DeepSeek客户端创建成功');
+          
+          // 使用流式辅助函数发送请求
+          const stream = await streamDeepSeekCompletion(
+            deepseekClient,
+            messages as any,
+            apiConfig.modelName,
+            { signal: abortController.signal }
+          );
+          
+          console.log('[ServiceWorker] 流式请求发送成功，开始接收响应');
+          let fullText = '';
+          let reasoningText = ''; // 用于存储推理内容
+          let hasCreatedReasoningContainer = false; // 标记是否已创建推理容器
+          let reasoningContainerId = ''; // 存储容器ID
+          
+          // 先创建思考过程的容器，放在最上方
+          if (apiConfig.modelName === 'deepseek-reasoner') {
+            reasoningContainerId = createThinkingContainer(responseStreamId, 'R1推理过程');
+            hasCreatedReasoningContainer = true;
+          }
+          
+          // 处理流式响应
+          for await (const chunk of stream) {
+            console.log('[ServiceWorker] 收到DeepSeek原始响应块:', chunk);
+            
+            // 尝试提取常规内容和推理内容
+            let content = '';
+            let reasoningContent = '';
+            
+            if (chunk.choices && chunk.choices[0]) {
+              const delta = chunk.choices[0].delta as any;
+              
+              // 检查是否有推理内容（R1模型特有）
+              if (delta.reasoning_content) {
+                reasoningContent = delta.reasoning_content;
+                reasoningText += reasoningContent;
+                console.log('[ServiceWorker] 收到R1推理内容:', reasoningContent.substring(0, 30) + (reasoningContent.length > 30 ? '...' : ''));
+                
+                // 将推理内容添加到已创建的容器中
+                if (apiConfig.modelName === 'deepseek-reasoner' && hasCreatedReasoningContainer) {
+                  console.log(`[ServiceWorker] 更新R1推理内容到容器: ${reasoningContainerId}, 内容长度: ${reasoningContent.length}字节`);
+                  chrome.runtime.sendMessage({
+                    type: 'UPDATE_REASONING',
+                    content: reasoningContent,
+                    containerId: reasoningContainerId,
+                    responseStreamId: responseStreamId
+                  });
+                }
+                
+                continue; // 不直接发送推理内容，仅更新容器
+              }
+              
+              // 检查常规内容
+              if (delta.content) {
+                content = delta.content;
+              } else if ((chunk.choices[0] as any).message && (chunk.choices[0] as any).message.content) {
+                content = (chunk.choices[0] as any).message.content;
+              }
+            }
+            
+            if (content) {
+              fullText += content;
+              console.log('[ServiceWorker] 接收DeepSeek流内容:', content.length, '字节, 内容:', content.substring(0, 20) + (content.length > 20 ? '...' : ''));
+              
+              // 发送部分响应
+              chrome.runtime.sendMessage({
+                type: 'ANSWER_TOKEN',
+                token: content,
+                responseStreamId: responseStreamId
+              });
+            }
+          }
+          
+          // 流结束，更新推理内容（以防万一容器创建后未能及时更新）
+          if (reasoningText && apiConfig.modelName === 'deepseek-reasoner' && hasCreatedReasoningContainer) {
+            console.log('[ServiceWorker] 流结束，确保推理内容已完全更新, 长度:', reasoningText.length, '字节');
+            
+            chrome.runtime.sendMessage({
+              type: 'FINAL_REASONING_UPDATE',
+              content: reasoningText,
+              containerId: reasoningContainerId,
+              responseStreamId: responseStreamId
+            });
+          }
+          
+          // 流结束
+          console.log('[ServiceWorker] DeepSeek流响应完成, 总长度:', fullText.length);
+          chrome.runtime.sendMessage({
+            type: 'STREAM_END',
+            text: fullText,
+            responseStreamId: responseStreamId
+          });
+        } catch (error: any) {
+          console.error('[ServiceWorker] DeepSeek请求失败:', error);
+          if (error.response) {
+            try {
+              const errorText = await error.response.text();
+              console.error('- API响应错误:', errorText);
+            } catch (e) {
+              console.error('- 无法读取API响应:', e);
+            }
+          }
+          throw error;
+        }
+        break;
+      }
+      
+      case 'qwen3': {
+        // 通义千问使用OpenAI SDK处理
+        console.log('[ServiceWorker] 使用OpenAI SDK处理通义千问请求');
+        let reasoningText = ''; // 用于存储思考过程内容
+        try {
+          // 创建通义千问客户端
+          const qwenClient = createQwenClient(apiConfig.apiKey, apiConfig.endpoint);
+          console.log('[ServiceWorker] 通义千问客户端创建成功');
+          
+          // 确定是否启用思考模式
+          const enableThinking = !!context?.enableThinking;
+          
+          // 检查是否要使用MCP模式
+          const useMCPMode = !!context?.useMCP;
+          let mcpClient: MCPClient | null = null;
+          let mcpTools: MCPTool[] = [];
+          let reasoningContainerId = ''; // 存储容器ID
+          let hasCreatedReasoningContainer = false; // 标记是否已创建思考过程容器
+          
+          // 创建自定义工具执行器
+          const messageSender = async (content: string) => {
+            chrome.runtime.sendMessage({
+              type: 'ANSWER_TOKEN',
+              token: content,
+              responseStreamId: responseStreamId
+            });
+            return { success: true };
+          };
+          
+          const customToolExecutor = new CustomToolExecutor(customTools, messageSender);
+          
+          // 如果启用了MCP模式，创建MCP客户端
+          if (useMCPMode) {
+            try {
+              console.log('[ServiceWorker] 启用MCP模式，尝试连接MCP服务器');
+              
+              // 获取所有MCP服务器配置
+              const mcpConfigs = await getAllMCPServerConfigs();
+              if (!mcpConfigs || mcpConfigs.length === 0) {
+                throw new Error('未配置MCP服务器');
+              }
+              
+              // 尝试依次连接MCP服务器
+              let connectedServerName = '';
+              let connectionError: Error | null = null;
+              
+              // 遍历所有服务器配置尝试连接
+              for (const mcpConfig of mcpConfigs) {
+                try {
+                  console.log('[ServiceWorker] 尝试连接MCP服务器:', 
+                    mcpConfig.name || mcpConfig.serverUrl);
+                  
+                  // 创建MCP客户端
+                  mcpClient = new MCPClient({
+                    serverConfig: mcpConfig,
+                    clientInfo: {
+                      name: 'askanything-browser-extension',
+                      version: '1.0.0'
+                    }
+                  });
+                  
+                  // 连接到MCP服务器
+                  await mcpClient.connect(mcpConfig);
+                  
+                  // 获取可用工具
+                  mcpTools = await mcpClient.listTools();
+                  
+                  // 简化服务器标识
+                  connectedServerName = mcpConfig.name || mcpConfig.serverUrl || '未命名服务器';
+                  
+                  console.log(`[ServiceWorker] MCP服务器 "${connectedServerName}" 连接成功，可用工具:`, mcpTools.map(t => t.name).join(', '));
+                  
+                  // 连接成功，跳出循环
+                  break;
+                } catch (error) {
+                  console.error(`[ServiceWorker] 连接MCP服务器 "${mcpConfig.name || mcpConfig.serverUrl || '未命名服务器'}" 失败:`, error);
+                  
+                  // 关闭现有客户端
+                  if (mcpClient) {
+                    try {
+                      await mcpClient.close();
+                    } catch (closeError) {
+                      console.warn('[ServiceWorker] 关闭MCP客户端失败:', closeError);
+                    }
+                    mcpClient = null;
+                  }
+                  
+                  // 保存错误信息，继续尝试下一个服务器
+                  connectionError = error instanceof Error ? error : new Error(String(error));
+                }
+              }
+              
+              // 如果所有服务器都连接失败
+              if (!mcpClient) {
+                throw new Error(`所有MCP服务器连接失败，最后错误: ${connectionError ? connectionError.message : '未知错误'}`);
+              }
+              
+              // 准备工具调用配置
+              console.log(`[ServiceWorker] MCP模式已启用，服务器: ${connectedServerName}, 工具数量: ${mcpTools.length}`);
+              
+              // 为思考模式记录工具信息
+              if (enableThinking) {
+                reasoningText += `\n可用工具: ${mcpTools.map(t => t.name).join(', ')}`;
+              }
+            } catch (error: any) {
+              console.error('[ServiceWorker] MCP服务器连接失败:', error);
+              chrome.runtime.sendMessage({
+                type: 'STREAM_ERROR',
+                error: `MCP服务器连接失败: ${error.message}`,
+                responseStreamId: responseStreamId
+              });
+              return;
+            }
+          }
+          
+          // 如果使用MCP模式，需要准备工具信息
+          if (useMCPMode) {
+            // 更新messages中的系统消息
+            messages[0].content = systemMessage;
+          }
+          
+          // 准备请求参数
+          const requestOptions: any = { 
+            signal: abortController.signal,
+            enableThinking: enableThinking || useMCPMode // 如果使用MCP，也默认启用思考模式
+          };
+          
+          // 如果使用MCP，添加工具
+          if (useMCPMode) {
+            let allTools: any[] = [...customTools]; // 添加自定义工具
+            
+            if (mcpTools.length > 0) {
+              // 转换MCP工具为千问API格式
+              const mcpApiTools = mcpTools.map(tool => {
+                return {
+                  type: 'function',
+                  function: {
+                    name: tool.name,
+                    description: tool.description,
+                    parameters: {
+                      type: tool.inputSchema.type,
+                      properties: tool.inputSchema.properties,
+                      required: tool.inputSchema.required
+                    }
+                  }
+                };
+              });
+              
+              // 合并MCP工具和自定义工具
+              allTools = [...allTools, ...mcpApiTools];
+            }
+            
+            // 设置工具
+            requestOptions.tools = allTools;
+            console.log('[ServiceWorker] 添加工具到千问请求:', requestOptions.tools);
+          }
+          
+          // 发送请求
+          const stream = await streamQwenCompletion(
+            qwenClient,
+            messages as any,
+            apiConfig.modelName,
+            requestOptions
+          );
+          
+          console.log('[ServiceWorker] 通义千问流式请求发送成功，开始接收响应');
+          let fullText = '';
+          
+          // 如果启用了思考模式，创建思考过程容器
+          if (enableThinking) {
+            reasoningContainerId = createThinkingContainer(responseStreamId, '通义千问思考过程');
+            hasCreatedReasoningContainer = true;
+          }
+          
+          // 收集工具调用请求
+          let toolCallsInProgress = false;
+          let currentToolCalls: any[] = [];
+          
+          // 处理流式响应
+          for await (const chunk of stream as any) {
+            console.log('[ServiceWorker] 收到通义千问原始响应块:', chunk);
+            
+            // 处理思考内容 -  reasoning_content
+            if ((enableThinking || useMCPMode) && hasCreatedReasoningContainer) {
+              let thinkingContent = null;
+              
+              // 尝试获取 delta.reasoning_content 属性
+              if (chunk.choices && 
+                      chunk.choices[0]?.delta && 
+                      (chunk.choices[0].delta as any).reasoning_content !== undefined && 
+                      (chunk.choices[0].delta as any).reasoning_content !== null) {
+                thinkingContent = (chunk.choices[0].delta as any).reasoning_content;
+              }
+              
+              // 如果找到思考内容，则更新
+              if (thinkingContent) {
+                reasoningText += thinkingContent;
+                console.log('[ServiceWorker] 收到通义千问思考内容:', 
+                  thinkingContent.substring(0, 30) + (thinkingContent.length > 30 ? '...' : ''),
+                  '长度:', thinkingContent.length);
+                
+                // 将思考内容添加到已创建的容器中
+                console.log(`[ServiceWorker] 更新通义千问思考内容到容器: ${reasoningContainerId}, 内容长度: ${thinkingContent.length}字节`);
+                chrome.runtime.sendMessage({
+                  type: 'UPDATE_REASONING',
+                  content: thinkingContent,
+                  containerId: reasoningContainerId,
+                  responseStreamId: responseStreamId
+                });
+              }
+            }
+            
+            // 处理工具调用 - 检查是否有tool_calls字段
+            if (useMCPMode && chunk.choices && 
+                chunk.choices[0]?.delta?.tool_calls) {
+              
+              // 获取工具调用数组
+              const toolCallDeltas = chunk.choices[0].delta.tool_calls;
+              console.log('[ServiceWorker] 检测到工具调用, 数量:', toolCallDeltas.length);
+              
+              // 处理所有工具调用
+              for (const toolCallDelta of toolCallDeltas) {
+                // 处理工具调用的结束标记
+                if (chunk.choices[0].finish_reason === 'tool_calls') {
+                  toolCallsInProgress = true;
+                  continue;
+                }
+                
+                // 如果是新的工具调用开始
+                if (toolCallDelta.index !== undefined && toolCallDelta.id) {
+                  toolCallsInProgress = true;
+                  
+                  // 查找是否已存在此工具调用
+                  let existingToolCall = currentToolCalls.find(tc => tc.id === toolCallDelta.id);
+                  
+                  if (!existingToolCall) {
+                    // 创建新的工具调用记录
+                    existingToolCall = {
+                      id: toolCallDelta.id,
+                      index: toolCallDelta.index,
+                      function: {
+                        name: toolCallDelta.function?.name || '',
+                        arguments: toolCallDelta.function?.arguments || ''
+                      }
+                    };
+                    
+                    // 添加到工具调用列表
+                    currentToolCalls.push(existingToolCall);
+                    
+                    console.log('[ServiceWorker] 检测到新工具调用:', existingToolCall.function.name, '索引:', toolCallDelta.index);
+                    
+                    // 更新思考容器显示工具调用开始
+                    chrome.runtime.sendMessage({
+                      type: 'UPDATE_REASONING',
+                      content: `\n正在准备工具调用 #${toolCallDelta.index + 1}: ${existingToolCall.function.name}\n参数: `,
+                      containerId: reasoningContainerId,
+                      responseStreamId: responseStreamId
+                    });
+                  } else {
+                    // 更新现有工具调用记录
+                    if (toolCallDelta.function?.name && toolCallDelta.function.name !== '') {
+                      existingToolCall.function.name = toolCallDelta.function.name;
+                    }
+                    
+                    if (toolCallDelta.function?.arguments) {
+                      existingToolCall.function.arguments += toolCallDelta.function.arguments;
+                      
+                      // 更新思考容器显示工具参数
+                      chrome.runtime.sendMessage({
+                        type: 'UPDATE_REASONING',
+                        content: toolCallDelta.function.arguments,
+                        containerId: reasoningContainerId,
+                        responseStreamId: responseStreamId
+                      });
+                    }
+                  }
+                }
+              }
+            }
+            
+            // 检查工具调用是否完成，如果完成则执行工具
+            if (useMCPMode && toolCallsInProgress && currentToolCalls.length > 0 && 
+                chunk.choices && chunk.choices[0].finish_reason === 'tool_calls') {
+              
+              toolCallsInProgress = false;
+              console.log('[ServiceWorker] 工具调用参数收集完成, 共有工具调用:', currentToolCalls.length);
+              
+              // 收集所有工具调用，准备发送给模型
+              const assistantToolCalls = currentToolCalls.map(tc => ({
+                id: tc.id,
+                type: "function",
+                function: {
+                  name: tc.function.name,
+                  arguments: tc.function.arguments
+                },
+                index: tc.index
+              }));
+              
+              // 工具调用结果
+              const toolResponses = [];
+              
+              // 依次执行每个工具调用
+              for (const toolCall of currentToolCalls) {
+                try {
+                  // 解析参数（有可能是JSON字符串）
+                  let toolArgs: any = {};
+                  try {
+                    toolArgs = JSON.parse(toolCall.function.arguments);
+                    console.log('[ServiceWorker] 工具参数解析成功:', toolArgs);
+                  } catch (e) {
+                    console.error('[ServiceWorker] 工具参数解析失败:', e, '原始参数:', toolCall.function.arguments);
+                    
+                    // 查找当前工具的输入模式
+                    let toolInfo: any = null;
+                    
+                    // 首先在自定义工具中查找
+                    if (customToolExecutor.isCustomTool(toolCall.function.name)) {
+                      toolInfo = customTools.find(t => t.function.name === toolCall.function.name);
+                      if (toolInfo) {
+                        toolInfo = {
+                          inputSchema: toolInfo.function.parameters
+                        };
+                      }
+                    } else {
+                      // 然后在MCP工具中查找
+                      toolInfo = mcpTools.find(t => t.name === toolCall.function.name);
+                    }
+                    
+                    if (toolInfo && toolInfo.inputSchema) {
+                      // 尝试更智能地处理参数
+                      if (toolInfo.inputSchema.type === 'object') {
+                        // 查找第一个必需的字符串参数，将原始内容作为该参数的值
+                        const firstStringParam = Object.entries(toolInfo.inputSchema.properties)
+                          .find(([key, schema]) => (
+                            (schema as any).type === 'string' && 
+                            toolInfo.inputSchema.required?.includes(key)
+                          ));
+                        
+                        if (firstStringParam) {
+                          // 使用第一个必需的字符串参数
+                          toolArgs = { [firstStringParam[0]]: toolCall.function.arguments.trim() };
+                          console.log('[ServiceWorker] 参数解析失败后回退到第一个字符串参数:', firstStringParam[0]);
+                        } else {
+                          // 找不到合适的参数，构建一个包含错误信息的参数对象
+                          toolArgs = { 
+                            error: "参数解析失败", 
+                            raw_input: toolCall.function.arguments 
+                          };
+                        }
+                      } else if (toolInfo.inputSchema.type === 'string') {
+                        // 如果工具接受单个字符串，直接使用
+                        toolArgs = toolCall.function.arguments.trim();
+                      } else {
+                        // 其他类型，构建错误信息
+                        toolArgs = { 
+                          error: "参数解析失败", 
+                          raw_input: toolCall.function.arguments 
+                        };
+                      }
+                    } else {
+                      // 未找到工具信息，使用错误信息对象
+                      toolArgs = { 
+                        error: "参数解析失败，未找到工具定义", 
+                        raw_input: toolCall.function.arguments 
+                      };
+                    }
+                  }
+                  
+                  // 执行工具调用
+                  console.log(`[ServiceWorker] 执行工具调用 #${toolCall.index + 1}:`, toolCall.function.name, toolArgs);
+                  
+                  // 更新思考容器显示工具调用执行中
+                  chrome.runtime.sendMessage({
+                    type: 'UPDATE_REASONING',
+                    content: `\n\n执行工具调用 #${toolCall.index + 1}...\n`,
+                    containerId: reasoningContainerId,
+                    responseStreamId: responseStreamId
+                  });
+                  
+                  let toolResult: ToolResponse;
+                  // 检查是否为自定义工具
+                  if (customToolExecutor.isCustomTool(toolCall.function.name)) {
+                    // 如果是askQuestion工具，保存问题以等待用户回答
+                    if (toolCall.function.name === 'ask_question' && !toolArgs.user_response) {
+                      console.log('[ServiceWorker] 检测到ask_question工具调用，保存问题等待用户回答');
+                      
+                      // 保存问题以便稍后处理
+                      const questionId = uuidv4();
+                      pendingAIQuestions[questionId] = {
+                        question: toolArgs.question || "请提供更多信息",
+                        toolCallId: toolCall.id,
+                        functionName: toolCall.function.name
+                      };
+                    }
+                    
+                    // 调用自定义工具
+                    console.log(`[ServiceWorker] 调用自定义工具: ${toolCall.function.name}`);
+                    toolResult = await customToolExecutor.executeTool(toolCall.function.name, toolArgs);
+                  } else {
+                    // 调用MCP工具
+                    console.log(`[ServiceWorker] 调用MCP工具: ${toolCall.function.name}`);
+                    const mcpResult = await mcpClient!.callTool(
+                      toolCall.function.name,
+                      toolArgs
+                    );
+                    
+                    // 将MCP结果转换为统一的ToolResponse格式
+                    toolResult = {
+                      status: 'success',
+                      content: mcpResult.content,
+                      message: mcpResult.message || "MCP工具执行成功"
+                    };
+                  }
+                  
+                  // 添加工具响应
+                  const toolResponse = {
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    name: toolCall.function.name,
+                    content: typeof toolResult.content === 'string' 
+                      ? toolResult.content 
+                      : JSON.stringify(toolResult.content)
+                  };
+                  
+                  toolResponses.push(toolResponse);
+                  
+                  // 更新思考容器显示工具调用结果
+                  chrome.runtime.sendMessage({
+                    type: 'UPDATE_REASONING',
+                    content: `\n工具调用 #${toolCall.index + 1} 结果:\n${JSON.stringify(toolResult.content, null, 2)}\n`,
+                    containerId: reasoningContainerId,
+                    responseStreamId: responseStreamId
+                  });
+                } catch (error: any) {
+                  console.error('[ServiceWorker] 工具调用执行失败:', error);
+                  
+                  // 构造错误响应
+                  const errorToolResult: ToolResponse = {
+                    status: 'error',
+                    content: {
+                      error: true,
+                      message: error.message || '未知错误',
+                      details: error.stack || ''
+                    },
+                    error: error.message || '未知错误',
+                    message: `执行工具 ${toolCall.function.name} 失败`
+                  };
+                  
+                  // 添加错误响应
+                  const errorResponse = {
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    name: toolCall.function.name,
+                    content: JSON.stringify(errorToolResult.content)
+                  };
+                  
+                  toolResponses.push(errorResponse);
+                  
+                  // 更新思考容器显示工具调用错误
+                  chrome.runtime.sendMessage({
+                    type: 'UPDATE_REASONING',
+                    content: `\n工具调用 #${toolCall.index + 1} 失败: ${errorToolResult.error}\n`,
+                    containerId: reasoningContainerId,
+                    responseStreamId: responseStreamId
+                  });
+                }
+              }
+              
+              // 发送所有工具调用结果回给LLM
+              const toolResponseMessages = [
+                ...messages,
+                { 
+                  role: 'assistant',
+                  content: null,
+                  tool_calls: assistantToolCalls
+                },
+                ...toolResponses
+              ];
+              
+              // 更新思考容器
+              chrome.runtime.sendMessage({
+                type: 'UPDATE_REASONING',
+                content: `\n正在生成最终回答...\n`,
+                containerId: reasoningContainerId,
+                responseStreamId: responseStreamId
+              });
+              
+              // 使用新的消息列表（包含工具结果）再次调用模型
+              console.log('[ServiceWorker] 发送所有工具调用结果回给通义千问');
+              
+              try {
+                // 重新发送请求
+                const toolResponseStream = await streamQwenCompletion(
+                  qwenClient,
+                  toolResponseMessages as any,
+                  apiConfig.modelName,
+                  { 
+                    signal: abortController.signal,
+                    enableThinking: true
+                  }
+                );
+                
+                // 处理工具调用后的响应
+                for await (const toolResponseChunk of toolResponseStream as any) {
+                  // 提取常规内容
+                  let content = '';
+                  
+                  if (toolResponseChunk.choices && toolResponseChunk.choices[0]?.delta?.content !== undefined) {
+                    content = toolResponseChunk.choices[0].delta.content || '';
+                  } 
+                  else if ((toolResponseChunk as any).output?.choices?.[0]?.message?.content) {
+                    content = (toolResponseChunk as any).output.choices[0].message.content;
+                  }
+                  
+                  if (content) {
+                    fullText += content;
+                    
+                    // 发送部分响应
+                    chrome.runtime.sendMessage({
+                      type: 'ANSWER_TOKEN',
+                      token: content,
+                      responseStreamId: responseStreamId
+                    });
+                  }
+                  
+                  // 处理思考内容
+                  if (toolResponseChunk.choices && 
+                      toolResponseChunk.choices[0]?.delta && 
+                      (toolResponseChunk.choices[0].delta as any).reasoning_content) {
+                    
+                    const additionalThinking = (toolResponseChunk.choices[0].delta as any).reasoning_content;
+                    
+                    // 将思考内容添加到已创建的容器中
+                    chrome.runtime.sendMessage({
+                      type: 'UPDATE_REASONING',
+                      content: additionalThinking,
+                      containerId: reasoningContainerId,
+                      responseStreamId: responseStreamId
+                    });
+                  }
+                }
+                
+                // 清理工具调用
+                currentToolCalls = [];
+                
+                // 结束处理，不再继续处理原始流
+                break;
+              } catch (retryError) {
+                console.error('[ServiceWorker] 发送工具结果到LLM失败:', retryError);
+                
+                // 发送错误信息给用户
+                chrome.runtime.sendMessage({
+                  type: 'ANSWER_TOKEN',
+                  token: `\n\n工具调用处理失败: ${retryError}\n无法获取进一步响应。请重试。`,
+                  responseStreamId: responseStreamId
+                });
+                
+                // 结束处理
+                break;
+              }
+            }
+            
+            // 提取常规内容
+            let content = '';
+            
+            // 处理兼容模式的响应（qwen3-235b-a22b）
+            if (chunk.choices && chunk.choices[0]?.delta?.content !== undefined && !toolCallsInProgress) {
+              content = chunk.choices[0].delta.content || '';
+            } 
+            // 处理原生千问API的响应
+            else if ((chunk as any).output?.choices?.[0]?.message?.content && !toolCallsInProgress) {
+              content = (chunk as any).output.choices[0].message.content;
+            }
+            
+            if (content) {
+              fullText += content;
+              console.log('[ServiceWorker] 接收通义千问流内容:', content.length, '字节, 内容:', content.substring(0, 20) + (content.length > 20 ? '...' : ''));
+              
+              // 发送部分响应
+              chrome.runtime.sendMessage({
+                type: 'ANSWER_TOKEN',
+                token: content,
+                responseStreamId: responseStreamId
+              });
+            }
+          }
+          
+          // MCP客户端关闭
+          if (useMCPMode && mcpClient) {
+            try {
+              await mcpClient.close();
+              console.log('[ServiceWorker] MCP客户端已关闭');
+            } catch (closeError) {
+              console.error('[ServiceWorker] 关闭MCP客户端失败:', closeError);
+            }
+          }
+          
+          // 流结束，确保思考内容已完全更新
+          if (reasoningText && hasCreatedReasoningContainer) {
+            console.log('[ServiceWorker] 流结束，确保思考内容已完全更新, 长度:', reasoningText.length, '字节');
+            
+            chrome.runtime.sendMessage({
+              type: 'FINAL_REASONING_UPDATE',
+              content: reasoningText,
+              containerId: reasoningContainerId,
+              responseStreamId: responseStreamId
+            });
+          }
+          
+          // 流结束
+          console.log('[ServiceWorker] 通义千问流响应完成, 总长度:', fullText.length);
+          chrome.runtime.sendMessage({
+            type: 'STREAM_END',
+            text: fullText,
+            responseStreamId: responseStreamId
+          });
+        } catch (error: any) {
+          console.error('[ServiceWorker] 通义千问请求失败:', error);
+          if (error.response) {
+            try {
+              const errorText = await error.response.text();
+              console.error('- API响应错误:', errorText);
+            } catch (e) {
+              console.error('- 无法读取API响应:', e);
+            }
+          }
+          throw error;
+        }
+        break;
+      }
+      
+      default: {
+        throw new Error(`不支持的API提供商: ${apiConfig.provider}`);
+      }
+    }
+  } catch (error: any) {
+    console.error('[ServiceWorker] 处理流式响应出错:', error);
+    // 发送错误消息
+    chrome.runtime.sendMessage({
+      type: 'STREAM_ERROR',
+      error: error.message,
+      responseStreamId: responseStreamId
+    });
+  }
+}
+
+// 活动流记录
+const activeStreams: Record<string, { abortController: AbortController, model: AIModel, timestamp: number }> = {};
+
+// 监听来自侧边栏的请求
+chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
+  console.log('[ServiceWorker] 收到消息:', message, '发送者:', sender);
+  const messageType = message.type;
+  
+  if (messageType === 'OPEN_SIDEPANEL') {
+    console.log('[ServiceWorker] 收到打开侧边栏请求');
+    
+    if (sender.tab?.id) {
+      try {
+        chrome.sidePanel.open({ tabId: sender.tab.id }).then(() => {
+          console.log('[ServiceWorker] 侧边栏已成功打开');
+          sendResponse({ success: true });
+        }).catch((error: any) => {
+          console.error('[ServiceWorker] 打开侧边栏失败:', error);
+          sendResponse({ success: false, error: error.toString() });
+        });
+      } catch (error: any) {
+        console.error('[ServiceWorker] 处理打开侧边栏请求时发生异常:', error);
+        sendResponse({ success: false, error: error.toString() });
+      }
+      return true; // 保持sendResponse的有效性
+    } else {
+      console.error('[ServiceWorker] 无法获取打开侧边栏的标签页ID');
+      sendResponse({ success: false, error: '无法获取标签页ID' });
+    }
+  }
+  
+  if (messageType === 'CLOSE_SIDEPANEL') {
+    console.log('[ServiceWorker] 收到关闭侧边栏请求');
+    
+    // 转发这个消息给所有侧边栏页面，让侧边栏自己关闭
+    chrome.runtime.sendMessage({
+      type: 'CLOSE_SIDEPANEL',
+      tabId: message.tabId || null // 传递tabId以便侧边栏知道这是哪个标签页的关闭请求
+    }).then(response => {
+      console.log('[ServiceWorker] 侧边栏关闭请求已发送:', response);
+      sendResponse({ success: true, closed: true });
+    }).catch(error => {
+      console.log('[ServiceWorker] 没有侧边栏接收关闭消息:', error);
+      sendResponse({ success: false, notOpen: true, error: String(error) });
+    });
+    
+    return true; // 保持sendResponse的有效性
+  }
+  
+  if (messageType === 'SET_MODEL') {
+    // 存储首选模型
+    console.log('[ServiceWorker] 设置首选模型:', message.model);
+    // 为DeepSeek-R1模型添加特殊日志
+    if (message.model === 'deepseek-r1') {
+      console.log('[ServiceWorker] 选择了DeepSeek-R1推理模型 (deepseek-reasoner)');
+    }
+    chrome.storage.sync.set({ preferredModel: message.model }, () => {
+      if (chrome.runtime.lastError) {
+        console.error('[ServiceWorker] 保存模型设置出错:', chrome.runtime.lastError);
+        sendResponse({ success: false, error: chrome.runtime.lastError });
+      } else {
+        console.log('[ServiceWorker] 模型设置已保存');
+        sendResponse({ success: true });
+      }
+    });
+    return true;
+  }
+  
+  if (messageType === 'GET_PAGE_INFO') {
+    // 获取当前标签的信息
+    if (message.tabId) {
+      console.log('[ServiceWorker] 获取页面信息, tabId:', message.tabId);
+      try {
+        chrome.tabs.sendMessage(message.tabId, { type: 'GET_PAGE_INFO' }, (response) => {
+          console.log('[ServiceWorker] 页面信息响应:', response);
+          sendResponse(response);
+        });
+      } catch (error) {
+        console.error('[ServiceWorker] 获取页面信息失败:', error);
+        sendResponse({ error: '获取页面信息失败' });
+      }
+      return true;
+    }
+  }
+  
+  if (messageType === 'ASK_QUESTION') {
+    // 获取当前选择的模型
+    const model = message.model || 'chatgpt';
+    const question = message.question || '';
+    
+    console.log('[ServiceWorker] 处理提问请求, 模型:', model, '问题内容:', question.substring(0, 50) + '...');
+    console.log('[ServiceWorker] 消息参数:', {
+      type: message.type,
+      model: message.model,
+      questionExists: !!message.question,
+      questionLength: message.question ? message.question.length : 0,
+      messagesCount: message.messages ? message.messages.length : 0,
+      contextExists: !!message.context
+    });
+    
+    // 检查关键参数
+    if (!question) {
+      console.error('[ServiceWorker] 缺少问题内容!');
+      sendResponse({ success: false, error: '缺少问题内容' });
+      return true;
+    }
+    
+    // 立即返回一个响应，表示已收到请求
+    sendResponse({ success: true, received: true });
+    
+    // 启动流式响应
+    handleStreamingResponse(model, question, message.context, sender, (_data) => {
+      // 这个回调已经不再需要发送响应
+      console.log('[ServiceWorker] 流处理开始，但不再使用sendResponse');
+    });
+    
+    // 必须返回true以保持sendResponse有效
+    return true;
+  }
+  
+  if (messageType === 'STOP_GENERATION') {
+    console.log('[ServiceWorker] 收到停止生成请求, streamId:', message.streamId);
+    
+    // 检查是否有对应的流
+    if (message.streamId && activeStreams[message.streamId]) {
+      // 取消请求
+      activeStreams[message.streamId].abortController.abort();
+      console.log('[ServiceWorker] 已中止生成请求:', message.streamId);
+      
+      // 发送结束消息
+      chrome.runtime.sendMessage({
+        type: 'STREAM_END',
+        responseStreamId: message.streamId,
+        forceStopped: true
+      });
+      
+      // 移除活动流记录
+      delete activeStreams[message.streamId];
+    } else {
+      console.log('[ServiceWorker] 未找到对应的流:', message.streamId);
+    }
+    return true;
+  }
+  
+  if (messageType === 'TEST_MCP_SERVER') {
+    console.log('[ServiceWorker] 收到测试MCP服务器请求:', message.serverConfig);
+    testMCPServer(message.serverConfig)
+      .then(result => {
+        console.log('[ServiceWorker] MCP服务器测试结果:', result);
+        sendResponse(result);
+      })
+      .catch(error => {
+        console.error('[ServiceWorker] 测试MCP服务器出错:', error);
+        sendResponse({ 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+      });
+    return true; // 保持sendResponse有效
+  }
+  
+  if (messageType === 'ANSWER_AI_QUESTION') {
+    // 处理用户对AI提问的回答
+    const userResponse = message.user_response || '';
+    const question = message.question || '';
+    
+    console.log('[ServiceWorker] 收到用户对AI提问的回答:', userResponse);
+    
+    // 查找是否有匹配的待回答问题
+    let matchingQuestionId = null;
+    for (const [id, pendingQuestion] of Object.entries(pendingAIQuestions)) {
+      if (pendingQuestion.question === question) {
+        matchingQuestionId = id;
+        break;
+      }
+    }
+    
+    if (matchingQuestionId) {
+      const pendingQuestion = pendingAIQuestions[matchingQuestionId];
+      console.log('[ServiceWorker] 找到匹配的AI提问:', pendingQuestion);
+      
+      // 创建一个包含用户回答的新对象
+      const updatedArgs = {
+        question: pendingQuestion.question,
+        user_response: userResponse
+      };
+      
+      // 获取当前使用的工具执行器
+      const currentExecutor = new CustomToolExecutor(customTools, async (content: string) => {
+        chrome.runtime.sendMessage({
+          type: 'ANSWER_TOKEN',
+          token: content,
+          responseStreamId: 'ai-response-' + Date.now()
+        });
+        return true;
+      });
+      
+      // 再次调用askQuestion工具，但这次带上用户回答
+      currentExecutor.executeTool('ask_question', updatedArgs)
+        .then((result: ToolResponse) => {
+          console.log('[ServiceWorker] 使用用户回答重新调用工具结果:', result);
+          // 这里可以根据需要处理结果
+        })
+        .catch((error: Error) => {
+          console.error('[ServiceWorker] 处理用户回答时出错:', error);
+        });
+      
+      // 删除已处理的问题
+      delete pendingAIQuestions[matchingQuestionId];
+    } else {
+      console.warn('[ServiceWorker] 未找到匹配的AI提问');
+    }
+    
+    sendResponse({ success: true, processed: !!matchingQuestionId });
+    return true;
+  }
+});
+
+// 添加快捷键支持
+chrome.commands.onCommand.addListener((command) => {
+  console.log('[ServiceWorker] 检测到命令:', command);
+  if (command === '_execute_action') {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id) {
+        try {
+          chrome.sidePanel.open({ tabId: tabs[0].id });
+          console.log('[ServiceWorker] 通过快捷键打开侧边栏');
+        } catch (error) {
+          console.error('[ServiceWorker] 通过快捷键打开侧边栏失败:', error);
+        }
+      }
+    });
+  }
+});
+
+// 函数：创建和发送思考容器（避免重复代码）
+const createThinkingContainer = (responseStreamId: string, label: string = '思考过程') => {
+  const containerId = `reasoning-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+  console.log(`[ServiceWorker] 创建思考容器，ID: ${containerId}, 标签: ${label}`);
+  
+  // 仅发送容器创建消息，不添加到标准流
+  chrome.runtime.sendMessage({
+    type: 'CREATE_THINKING_CONTAINER',
+    containerId: containerId,
+    label: label,
+    responseStreamId: responseStreamId
+  });
+  
+  return containerId;
+};
+
+// 获取所有MCP服务器配置
+async function getAllMCPServerConfigs(): Promise<MCPServer[]> {
+  try {
+    const data = await chrome.storage.local.get(['mcpServerConfigs', 'mcpServerConfig']);
+    const mcpServerConfigsFromStorage = data.mcpServerConfigs || [];
+    
+    // 如果有新版多配置
+    if (mcpServerConfigsFromStorage && mcpServerConfigsFromStorage.length > 0) {
+      console.log('[ServiceWorker] 加载了多个MCP服务器配置, 数量:', mcpServerConfigsFromStorage.length);
+      
+      // 过滤有效的配置
+      return mcpServerConfigsFromStorage
+        .filter((config: MCPServer) => {
+          // 只保留有serverUrl的配置
+          if (!config.serverUrl) {
+            console.warn('[ServiceWorker] 忽略缺少serverUrl的MCP服务器配置:', config.name || 'unnamed');
+            return false;
+          }
+          return true;
+        });
+    }
+    
+    // 回退到旧版配置，转换为新格式
+    if (data.mcpServerConfig) {
+      console.log('[ServiceWorker] 使用旧版单一MCP服务器配置');
+      const oldConfig = data.mcpServerConfig;
+      
+      // 适配旧版配置
+      const serverUrl = oldConfig.serverUrl || oldConfig.wsUrl || oldConfig.sseUrl;
+      if (!serverUrl) {
+        console.warn('[ServiceWorker] 旧版MCP配置缺少有效的服务器URL');
+        return [];
+      }
+      
+      return [{
+        name: oldConfig.name || '旧版配置',
+        serverUrl: serverUrl
+      }];
+    }
+    
+    // 没有配置
+    return [];
+  } catch (error) {
+    console.error('[ServiceWorker] 获取MCP服务器配置失败:', error);
+    return [];
+  }
+}
+
+// 测试MCP服务器连接
+async function testMCPServer(serverConfig: MCPServer): Promise<{success: boolean, tools?: MCPTool[], error?: string}> {
+  console.log('[ServiceWorker] 开始测试MCP服务器连接:', serverConfig.name || serverConfig.serverUrl);
+  
+  let mcpClient: MCPClient | null = null;
+  
+  try {
+    // 创建MCP客户端
+    mcpClient = new MCPClient({
+      serverConfig,
+      clientInfo: {
+        name: 'askanything-browser-extension',
+        version: '1.0.0'
+      }
+    });
+    
+    // 连接到MCP服务器
+    await mcpClient.connect(serverConfig);
+    console.log('[ServiceWorker] MCP服务器连接成功');
+    
+    // 获取工具列表
+    const tools = await mcpClient.listTools();
+    console.log('[ServiceWorker] 获取MCP工具列表成功, 数量:', tools.length);
+    
+    // 关闭连接
+    await mcpClient.close();
+    
+    return {
+      success: true,
+      tools
+    };
+  } catch (error) {
+    console.error('[ServiceWorker] MCP服务器连接测试失败:', error);
+    
+    // 尝试关闭可能存在的连接
+    if (mcpClient) {
+      try {
+        await mcpClient.close();
+      } catch (closeError) {
+        console.warn('[ServiceWorker] 关闭MCP客户端失败:', closeError);
+      }
+    }
+    
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+} 

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AskAnything - 设置</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #2c3e50;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 10px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    input[type="text"], 
+    input[type="password"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    .alert {
+      padding: 10px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .alert-success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .alert-error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .hidden {
+      display: none;
+    }
+    .model-section {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+    .toggle-password {
+      background: none;
+      border: none;
+      color: #3498db;
+      padding: 0;
+      font-size: 14px;
+      margin-top: 5px;
+      cursor: pointer;
+    }
+    /* MCP连接状态样式 */
+    .mcp-status {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+      border: 1px solid #ddd;
+    }
+    #mcp-connection-status {
+      font-weight: 500;
+      position: relative;
+      padding-left: 25px;
+    }
+    #mcp-connection-status::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background-color: #888;
+    }
+    .connection-testing::before {
+      background-color: #ffc107 !important;
+      animation: pulse 1s infinite;
+    }
+    .connection-success::before {
+      background-color: #28a745 !important;
+    }
+    .connection-warning::before {
+      background-color: #fd7e14 !important;
+    }
+    .connection-error::before {
+      background-color: #dc3545 !important;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+    #test-mcp-button {
+      background-color: #6c757d;
+      margin-left: 10px;
+    }
+    #test-mcp-button:hover {
+      background-color: #5a6268;
+    }
+    .mcp-server-item {
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 15px;
+      margin-bottom: 20px;
+      background-color: #f9f9f9;
+      position: relative;
+    }
+    .remove-server-btn {
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      position: absolute;
+      right: 15px;
+      top: 15px;
+    }
+    .remove-server-btn:hover {
+      background-color: #c82333;
+    }
+    #add-mcp-server-button {
+      background-color: #28a745;
+      margin-right: 10px;
+    }
+    #add-mcp-server-button:hover {
+      background-color: #218838;
+    }
+    .test-mcp-button {
+      background-color: #6c757d;
+      margin-top: 10px;
+    }
+    .test-mcp-button:hover {
+      background-color: #5a6268;
+    }
+    /* 参数和环境变量样式 */
+    .arg-item, .env-item {
+      display: flex;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+    
+    .arg-item input, .env-item input {
+      flex: 1;
+      margin-right: 5px;
+    }
+    
+    .env-item input:first-child {
+      flex: 0 0 30%;
+      margin-right: 10px;
+    }
+    
+    .remove-item-btn {
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    
+    .add-arg-btn, .add-env-btn {
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 5px;
+    }
+    /* SSE样式 */
+    .transport-config {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+    }
+  </style>
+</head>
+<body>
+  <h1>AskAnything - API密钥设置</h1>
+  
+  <div id="status-message" class="alert hidden"></div>
+  
+  <div class="form-group">
+    <label for="openai-api-key">OpenAI API密钥 (ChatGPT)</label>
+    <input type="password" id="openai-api-key" placeholder="sk-..." autocomplete="off">
+    <button class="toggle-password" data-target="openai-api-key">显示/隐藏</button>
+    <p>用于ChatGPT模型的调用。<a href="https://platform.openai.com/account/api-keys" target="_blank">获取OpenAI API密钥</a></p>
+  </div>
+  
+  <div class="form-group">
+    <label for="anthropic-api-key">Anthropic API密钥 (Claude)</label>
+    <input type="password" id="anthropic-api-key" placeholder="sk-ant-..." autocomplete="off">
+    <button class="toggle-password" data-target="anthropic-api-key">显示/隐藏</button>
+    <p>用于Claude模型的调用。<a href="https://console.anthropic.com/settings/keys" target="_blank">获取Anthropic API密钥</a></p>
+  </div>
+  
+  <div class="form-group">
+    <label for="deepseek-api-key">DeepSeek API密钥</label>
+    <input type="password" id="deepseek-api-key" placeholder="..." autocomplete="off">
+    <button class="toggle-password" data-target="deepseek-api-key">显示/隐藏</button>
+    <p>用于DeepSeek模型的调用。</p>
+  </div>
+  
+  <div class="form-group">
+    <label for="qwen3-api-key">通义千问3 API密钥</label>
+    <input type="password" id="qwen3-api-key" placeholder="..." autocomplete="off">
+    <button class="toggle-password" data-target="qwen3-api-key">显示/隐藏</button>
+    <p>用于通义千问3模型的调用。</p>
+  </div>
+  
+  <div class="form-group">
+    <label for="zhipu-api-key">智谱 API密钥</label>
+    <input type="password" id="zhipu-api-key" placeholder="..." autocomplete="off">
+    <button class="toggle-password" data-target="zhipu-api-key">显示/隐藏</button>
+    <p>用于智谱搜索工具的调用。</p>
+  </div>
+  
+  <button id="save-button">保存设置</button>
+  
+  <div class="model-section">
+    <h2>API端点设置 (可选)</h2>
+    <p>如果你使用自定义API端点，可以在下方设置。如不填写，将使用默认设置。</p>
+    
+    <div class="form-group">
+      <label for="openai-endpoint">OpenAI API端点</label>
+      <input type="text" id="openai-endpoint" placeholder="https://api.openai.com/v1">
+    </div>
+    
+    <div class="form-group">
+      <label for="anthropic-endpoint">Anthropic API端点</label>
+      <input type="text" id="anthropic-endpoint" placeholder="https://api.anthropic.com">
+    </div>
+    
+    <div class="form-group">
+      <label for="deepseek-endpoint">DeepSeek API端点</label>
+      <input type="text" id="deepseek-endpoint" placeholder="https://api.deepseek.com">
+    </div>
+    
+    <div class="form-group">
+      <label for="qwen3-endpoint">通义千问3 API端点</label>
+      <input type="text" id="qwen3-endpoint" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1">
+    </div>
+    
+    <button id="save-endpoints-button">保存端点设置</button>
+  </div>
+  
+  <div class="model-section">
+    <h2>MCP服务器设置 (通义千问工具支持)</h2>
+    <p>设置MCP服务器以启用通义千问3的工具调用功能。您可以配置多个MCP服务器。</p>
+    
+    <div id="mcp-servers-container">
+      <!-- 这里将动态添加MCP服务器配置 -->
+    </div>
+    
+    <div id="mcp-server-template" class="hidden">
+      <div class="mcp-server-item">
+        <h3>MCP服务器 <span class="server-number"></span> <button class="remove-server-btn">删除</button></h3>
+        
+        <div class="form-group">
+          <label for="mcp-server-name-{id}">服务器名称 (可选)</label>
+          <input type="text" id="mcp-server-name-{id}" class="mcp-server-name" placeholder="为此服务器添加一个易记的名称">
+        </div>
+        
+        <div class="form-group">
+          <label for="mcp-server-url-{id}">服务器URL</label>
+          <input type="text" id="mcp-server-url-{id}" class="mcp-server-url" placeholder="例如: http://localhost:3000/mcp">
+          <p>MCP服务器连接地址，通常以http://或https://开头。系统会自动选择最优连接方式。</p>
+        </div>
+        
+        <div class="form-group mcp-status hidden">
+          <div class="mcp-connection-status"></div>
+        </div>
+        
+        <button class="test-mcp-button">测试连接</button>
+      </div>
+    </div>
+    
+    <button id="add-mcp-server-button">+ 添加MCP服务器</button>
+    <button id="save-mcp-button">保存MCP设置</button>
+  </div>
+  
+  <script src="options.js"></script>
+</body>
+</html> 
