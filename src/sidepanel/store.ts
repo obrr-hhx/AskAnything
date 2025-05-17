@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { AIModel, ChatMessage, ChatHistory, ContextData } from '../shared/models';
 import { getSettings, setPreferredModel } from '../shared/settings';
 import { getChatHistory, addChatSession, searchChatHistory, clearChatHistory } from '../shared/history';
+import { MCPService } from '../services/mcp';
 
 // 定义状态类型
 interface ChatState {
@@ -398,6 +399,12 @@ function setupMessageListener() {
         console.log('[Store] 停止正在进行的生成');
         stopGeneration();
       }
+      
+      // 关闭MCP客户端连接
+      console.log('[Store] 关闭所有MCP客户端连接');
+      MCPService.closeAllMCPClients().catch(error => {
+        console.error('[Store] 关闭MCP客户端时出错:', error);
+      });
       
       // 延迟一点执行关闭，确保前面的操作有时间完成
       setTimeout(() => {

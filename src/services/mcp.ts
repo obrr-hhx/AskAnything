@@ -1,6 +1,10 @@
 import { MCPClient, MCPServer } from '../shared/mcp-client';
 import { CustomToolExecutor, customTools } from '../shared/custom-tools';
 import { ChatCompletionTool } from 'openai/resources/chat/completions';
+
+// 用于存储活动的MCP客户端
+const activeMCPClients: MCPClient[] = [];
+
 /**
  * MCP服务
  * 管理MCP客户端和相关功能
@@ -124,7 +128,32 @@ export class MCPService {
         version: '1.0.0'
       }
     });
+    // 将客户端添加到活动客户端列表
+    activeMCPClients.push(client);
+    console.log('[MCPService] MCP客户端已创建并添加到活动列表');
     return client;
+  }
+  
+  /**
+   * 关闭所有MCP客户端连接
+   * 在侧边栏关闭时调用此方法
+   */
+  public static async closeAllMCPClients(): Promise<void> {
+    console.log('[MCPService] 正在关闭所有MCP客户端连接', activeMCPClients.length);
+    const closePromises = activeMCPClients.map(async (client) => {
+      try {
+        await client.close();
+        console.log('[MCPService] 成功关闭一个MCP客户端连接');
+      } catch (error: any) {
+        console.error('[MCPService] 关闭MCP客户端连接时出错:', error);
+      }
+    });
+    
+    await Promise.all(closePromises);
+    
+    // 清空活动客户端列表
+    activeMCPClients.length = 0;
+    console.log('[MCPService] 已关闭所有MCP客户端连接');
   }
   
   /**

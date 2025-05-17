@@ -755,4 +755,33 @@ export class QwenProvider extends BaseProvider {
       this.handlers.onError(error);
     }
   }
+
+  /**
+   * 销毁实例，清理资源
+   * 重写基类方法，确保MCP客户端正确关闭
+   */
+  public override destroy(): void {
+    // 关闭所有MCP客户端连接
+    if (this.mcps.length > 0) {
+      console.log(`[QwenProvider] 正在关闭 ${this.mcps.length} 个MCP客户端连接`);
+      
+      this.mcps.forEach(async (client) => {
+        try {
+          await client.close();
+          console.log(`[QwenProvider] MCP客户端已关闭`);
+        } catch (error) {
+          console.error(`[QwenProvider] 关闭MCP客户端时出错:`, error);
+        }
+      });
+      
+      // 清空MCP客户端列表
+      this.mcps = [];
+      this.toolsMap = {};
+      this.tools = [...customTools]; // 仅保留自定义工具
+      console.log(`[QwenProvider] 已清空MCP客户端列表`);
+    }
+    
+    // 调用基类销毁方法
+    super.destroy();
+  }
 }

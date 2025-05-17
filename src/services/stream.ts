@@ -216,6 +216,13 @@ export class StreamService {
     
     // 检查是否有对应的流
     if (streamId && this.activeStreams[streamId]) {
+      // 获取并销毁Provider实例
+      const provider = ProviderFactory.getProviderInstance(streamId);
+      if (provider) {
+        console.log('[StreamService] 正在销毁Provider实例, streamId:', streamId);
+        provider.destroy();
+      }
+      
       // 取消请求
       this.activeStreams[streamId].abortController.abort();
       console.log('[StreamService] 已中止生成请求:', streamId);
@@ -247,6 +254,13 @@ export class StreamService {
       // 检查是否过期
       if (now - stream.timestamp > maxAgeMs) {
         console.log(`[StreamService] 清理过期流: ${streamId}, 已存在 ${Math.floor((now - stream.timestamp) / 1000)} 秒`);
+        
+        // 获取并销毁Provider实例
+        const provider = ProviderFactory.getProviderInstance(streamId);
+        if (provider) {
+          console.log(`[StreamService] 销毁过期流的Provider实例: ${streamId}`);
+          provider.destroy();
+        }
         
         // 取消请求
         try {

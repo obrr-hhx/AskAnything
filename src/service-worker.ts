@@ -97,6 +97,14 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
     if (messageType === 'CLOSE_SIDEPANEL_REQUEST') {
       console.log('[ServiceWorker] 收到关闭侧边栏请求');
       
+      // 关闭所有MCP客户端连接
+      try {
+        console.log('[ServiceWorker] 正在关闭所有MCP客户端连接');
+        await MCPService.closeAllMCPClients();
+      } catch (error) {
+        console.error('[ServiceWorker] 关闭MCP客户端连接时发生错误:', error);
+      }
+      
       // 转发这个消息给所有侧边栏页面，让侧边栏自己关闭
       chrome.runtime.sendMessage({
         type: 'CLOSE_SIDEPANEL_COMMAND',
@@ -187,14 +195,22 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
     }
     
     if (messageType === 'STOP_GENERATION') {
-      console.log('[ServiceWorker] 收到停止生成请求, streamId:', message.streamId);
+      console.log('[ServiceWorker] 收到停止生成请求, streamId:', message.responseStreamId);
       
       // 使用StreamService停止生成
-      const stopped = StreamService.stopGeneration(message.streamId);
+      const stopped = StreamService.stopGeneration(message.responseStreamId);
       if (!stopped) {
-        console.log('[ServiceWorker] 未找到对应的流:', message.streamId);
+        console.log('[ServiceWorker] 未找到对应的流:', message.responseStreamId);
+        
+        // 尝试额外获取并销毁Provider实例
+        const provider = ProviderFactory.getProviderInstance(message.responseStreamId);
+        if (provider) {
+          console.log('[ServiceWorker] 找到Provider实例，正在销毁:', message.responseStreamId);
+          provider.destroy();
+        }
       }
       
+      sendResponse({ success: true });
       return true;
     }
     
