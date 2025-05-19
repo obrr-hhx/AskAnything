@@ -640,20 +640,30 @@ input:checked + .pill-toggle-slider:before {
 .mcp-tools-button {
   display: flex;
   align-items: center;
-  background-color: #f0f0f0;
+  background-color: var(--hover-color);
   border: none;
   border-radius: 16px;
   padding: 6px 12px;
   font-size: 12px;
-  color: #333;
+  color: var(--text-color);
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .mcp-tools-button:hover {
-  background-color: #e0e0e0;
+  background-color: var(--border-color);
 }
 
 .mcp-tools-button svg {
   margin-right: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mcp-tools-button {
+    background-color: #303134;
+  }
+  
+  .mcp-tools-button:hover {
+    background-color: #3c4043;
+  }
 } 

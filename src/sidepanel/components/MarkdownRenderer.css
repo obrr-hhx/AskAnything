@@ -5,6 +5,7 @@
   width: 100%;
   max-width: 100%;
   overflow-wrap: break-word;
+  color: var(--text-color);
 }
 
 .markdown-content p {
@@ -63,14 +64,14 @@
   color: var(--text-color);
   border-left: 4px solid var(--border-color);
   margin: 16px 0;
-  opacity: 0.8;
+  opacity: var(--blockquote-opacity);
   max-width: 100%;
 }
 
 .markdown-content code {
   font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
   padding: 2px 4px;
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--code-background);
   border-radius: 3px;
   font-size: 13px;
   max-width: 100%;
@@ -83,6 +84,18 @@
   .markdown-content code {
     background-color: rgba(255, 255, 255, 0.1);
   }
+  
+  .markdown-content pre {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  .markdown-content pre code {
+    background-color: transparent;
+  }
+  
+  .markdown-content table {
+    border-color: var(--border-color);
+  }
 }
 
 .markdown-content pre {
@@ -90,6 +103,7 @@
   overflow: auto;
   border-radius: 6px;
   max-width: 100%;
+  background-color: var(--code-background);
 }
 
 .markdown-content pre > div {
@@ -124,6 +138,14 @@
 }
 
 @media (prefers-color-scheme: dark) {
+  .markdown-content {
+    color: var(--text-color);
+  }
+  
+  .markdown-content a {
+    color: var(--primary-color);
+  }
+  
   .markdown-content table th {
     background-color: rgba(255, 255, 255, 0.05);
   }

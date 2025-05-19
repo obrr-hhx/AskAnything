@@ -8,15 +8,15 @@
 
 /* 分屏模式下的笔记浏览器 */
 .note-browser.split-mode {
-  border-left: 1px solid #ddd;
+  border-left: 1px solid var(--border-color);
 }
 
 .note-browser-header {
   display: flex;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid #ddd;
-  background-color: #f5f5f5;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--background-color);
 }
 
 .note-browser-header h2 {
@@ -28,7 +28,8 @@
 .current-note-info {
   margin-left: 10px;
   font-size: 13px;
-  color: #666;
+  color: var(--text-color);
+  opacity: 0.7;
 }
 
 .current-note-title {
@@ -46,7 +47,7 @@
 .import-note-button,
 .browse-notes-button {
   padding: 4px 8px;
-  background-color: #007bff;
+  background-color: var(--primary-color);
   color: white;
   border: none;
   border-radius: 4px;
@@ -58,15 +59,22 @@
 .new-note-button:hover,
 .import-note-button:hover,
 .browse-notes-button:hover {
-  background-color: #0069d9;
+  background-color: var(--primary-color);
+  opacity: 0.9;
 }
 
-.import-note-button {
-  background-color: #6c757d;
+.import-note-button,
+.browse-notes-button,
+.close-button {
+  background-color: var(--border-color);
+  color: var(--text-color);
 }
 
-.import-note-button:hover {
-  background-color: #5a6268;
+.import-note-button:hover,
+.browse-notes-button:hover,
+.close-button:hover {
+  background-color: var(--border-color);
+  opacity: 0.8;
 }
 
 .note-browser-content {
@@ -84,15 +92,15 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #f9f9f9;
+  background-color: var(--background-color);
 }
 
 .notes-list-header {
   display: flex;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid #ddd;
-  background-color: #f5f5f5;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--background-color);
 }
 
 .notes-list-header h2 {
@@ -103,23 +111,17 @@
 
 .close-button {
   padding: 4px 8px;
-  background-color: #6c757d;
-  color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
 }
 
-.close-button:hover {
-  background-color: #5a6268;
-}
-
 .notes-list-actions {
   padding: 8px 16px;
   display: flex;
   gap: 8px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .notes-list-content {
@@ -129,17 +131,23 @@
 
 .note-item {
   padding: 10px 16px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-color);
   cursor: pointer;
 }
 
 .note-item:hover {
-  background-color: #f0f0f0;
+  background-color: var(--hover-color);
 }
 
 .note-item.selected {
-  background-color: #e6f7ff;
-  border-left: 3px solid #1890ff;
+  background-color: rgba(66, 133, 244, 0.1);
+  border-left: 3px solid var(--primary-color);
+}
+
+@media (prefers-color-scheme: dark) {
+  .note-item.selected {
+    background-color: rgba(138, 180, 248, 0.2);
+  }
 }
 
 .note-title {
@@ -149,14 +157,16 @@
 
 .note-filename {
   font-size: 11px;
-  color: #666;
+  color: var(--text-color);
+  opacity: 0.7;
   margin-bottom: 5px;
   font-style: italic;
 }
 
 .note-date {
   font-size: 11px;
-  color: #888;
+  color: var(--text-color);
+  opacity: 0.6;
 }
 
 .note-viewer {
@@ -178,7 +188,7 @@
 
 .note-display-header {
   padding: 8px 16px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -187,12 +197,12 @@
 .note-title-display h3 {
   margin: 0;
   font-size: 16px;
-  color: #333;
+  color: var(--text-color);
 }
 
 .note-display-header button {
   padding: 4px 8px;
-  background-color: #28a745;
+  background-color: var(--secondary-color);
   color: white;
   border: none;
   border-radius: 4px;
@@ -201,23 +211,23 @@
 }
 
 .note-display-header button:hover {
-  background-color: #218838;
+  opacity: 0.9;
 }
 
 .export-button {
-  background-color: #17a2b8 !important;
+  background-color: var(--primary-color) !important;
 }
 
 .export-button:hover {
-  background-color: #138496 !important;
+  opacity: 0.9 !important;
 }
 
 .browse-notes-button {
-  background-color: #6c757d !important;
+  background-color: var(--border-color) !important;
 }
 
 .browse-notes-button:hover {
-  background-color: #5a6268 !important;
+  opacity: 0.8 !important;
 }
 
 .note-content {
@@ -242,8 +252,8 @@
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  border-bottom: 1px solid #eee;
-  background-color: #f9f9f9;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--background-color);
 }
 
 .editor-mode-toggle {
@@ -251,19 +261,25 @@
   gap: 4px;
 }
 
+/* 编辑器切换按钮 */
 .mode-button {
   padding: 4px 8px;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
-  background-color: #f0f0f0;
-  border: 1px solid #ddd;
   cursor: pointer;
   font-size: 12px;
 }
 
+.mode-button:hover {
+  background-color: var(--hover-color);
+}
+
 .mode-button.active {
-  background-color: #007bff;
+  background-color: var(--primary-color);
   color: white;
-  border-color: #0062cc;
+  border-color: var(--primary-color);
 }
 
 .action-buttons {
@@ -280,7 +296,7 @@
 }
 
 .action-buttons button:first-child {
-  background-color: #28a745;
+  background-color: var(--secondary-color);
   color: white;
 }
 
@@ -290,11 +306,25 @@
 }
 
 .action-buttons button:hover:first-child {
-  background-color: #218838;
+  opacity: 0.9;
 }
 
 .action-buttons button:hover:last-child {
-  background-color: #c82333;
+  opacity: 0.9;
+}
+
+@media (prefers-color-scheme: dark) {
+  .action-buttons button:last-child {
+    background-color: #e35d6a;
+  }
+  
+  .note-textarea {
+    border: 1px solid var(--border-color);
+  }
+  
+  .no-selection, .no-notes {
+    opacity: 0.6;
+  }
 }
 
 /* 分屏编辑模式 */
@@ -310,19 +340,18 @@
   flex: 1;
   height: 100%;
   overflow-y: auto;
+  padding: 0;
+  box-sizing: border-box;
+  min-width: 0; /* 确保内容可以收缩 */
 }
 
 .preview-side {
+  border-left: 1px solid var(--border-color);
   padding: 16px;
-  background-color: #fff;
-  overflow-x: hidden;
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .editor-side {
-  background-color: #f9f9f9;
-  border-left: 1px solid #eee;
+  background-color: var(--note-background);
 }
 
 /* 纯编辑模式 */
@@ -332,43 +361,45 @@
 }
 
 .note-textarea {
-  height: 100%;
   width: 100%;
+  height: 100%;
   padding: 16px;
   border: none;
   resize: none;
-  font-family: 'Courier New', monospace;
+  font-family: monospace;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
+  background-color: var(--background-color);
+  color: var(--text-color);
   outline: none;
 }
 
 .no-selection {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  height: 100%;
-  color: #888;
+  align-items: center;
+  padding: 16px;
   text-align: center;
-  padding: 20px;
+  color: var(--text-color);
+  opacity: 0.7;
+}
+
+.no-selection h3 {
+  margin-bottom: 16px;
 }
 
 .no-notes {
+  flex: 1;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
-  height: 100%;
-  color: #888;
-  font-style: italic;
+  align-items: center;
+  padding: 16px;
   text-align: center;
-  padding: 20px;
-}
-
-.no-selection-actions {
-  margin-top: 20px;
-  display: flex;
-  gap: 10px;
+  color: var(--text-color);
+  opacity: 0.7;
 }
 
 /* 笔记面板 */
@@ -386,4 +417,11 @@
 .split-mode .preview-side,
 .split-mode .note-textarea {
   font-size: 13px;
-} 
+}
+
+  .split-mode .note-content,
+  .split-mode .note-editor {
+    width: 100%;
+    overflow-x: auto;
+    min-width: 0;
+  } 
