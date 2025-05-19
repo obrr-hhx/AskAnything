@@ -3,6 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import rehypeRaw from 'rehype-raw';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import './MarkdownRenderer.css';
 
 interface MarkdownRendererProps {
@@ -25,7 +28,8 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
   return (
     <div className="markdown-content">
       <ReactMarkdown
-        rehypePlugins={[rehypeRaw]} // 启用HTML内联渲染
+        rehypePlugins={[rehypeRaw, rehypeKatex]} // 启用HTML内联渲染和KaTeX公式渲染
+        remarkPlugins={[remarkMath]} // 启用数学公式解析
         components={{
           code({ node, inline, className, children, ...props }: CodeProps) {
             const match = /language-(\w+)/.exec(className || '');

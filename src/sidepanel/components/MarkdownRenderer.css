@@ -160,4 +160,41 @@
   .markdown-content .thinking-details summary:hover {
     background-color: rgba(255, 255, 255, 0.05);
   }
+}
+
+/* KaTeX 公式渲染样式 */
+.markdown-content .katex {
+  font-size: 1.1em;
+  line-height: 1.5;
+  overflow: auto hidden;
+  max-width: 100%;
+}
+
+.markdown-content .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5em 0;
+  margin: 1em 0;
+}
+
+/* 修复可能的锚点跳转问题 */
+.markdown-content .katex-html {
+  display: block;
+}
+
+/* 避免 KaTeX 内部元素影响布局 */
+.markdown-content .katex-mathml {
+  position: absolute;
+  clip: rect(1px, 1px, 1px, 1px);
+  padding: 0;
+  border: 0;
+  height: 1px;
+  width: 1px;
+  overflow: hidden;
+}
+
+/* 确保行内公式垂直对齐 */
+.markdown-content .katex-inline {
+  display: inline-block;
+  vertical-align: middle;
 } 
