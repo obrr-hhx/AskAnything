@@ -1,0 +1,389 @@
+.note-browser {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* 分屏模式下的笔记浏览器 */
+.note-browser.split-mode {
+  border-left: 1px solid #ddd;
+}
+
+.note-browser-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid #ddd;
+  background-color: #f5f5f5;
+}
+
+.note-browser-header h2 {
+  margin: 0;
+  font-size: 16px;
+  margin-right: auto;
+}
+
+.current-note-info {
+  margin-left: 10px;
+  font-size: 13px;
+  color: #666;
+}
+
+.current-note-title {
+  font-style: italic;
+}
+
+.note-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.back-button,
+.new-note-button,
+.import-note-button,
+.browse-notes-button {
+  padding: 4px 8px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.back-button:hover,
+.new-note-button:hover,
+.import-note-button:hover,
+.browse-notes-button:hover {
+  background-color: #0069d9;
+}
+
+.import-note-button {
+  background-color: #6c757d;
+}
+
+.import-note-button:hover {
+  background-color: #5a6268;
+}
+
+.note-browser-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+/* 笔记列表页面 */
+.notes-list-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #f9f9f9;
+}
+
+.notes-list-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid #ddd;
+  background-color: #f5f5f5;
+}
+
+.notes-list-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+}
+
+.close-button {
+  padding: 4px 8px;
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.close-button:hover {
+  background-color: #5a6268;
+}
+
+.notes-list-actions {
+  padding: 8px 16px;
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.notes-list-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.note-item {
+  padding: 10px 16px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.note-item:hover {
+  background-color: #f0f0f0;
+}
+
+.note-item.selected {
+  background-color: #e6f7ff;
+  border-left: 3px solid #1890ff;
+}
+
+.note-title {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.note-filename {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 5px;
+  font-style: italic;
+}
+
+.note-date {
+  font-size: 11px;
+  color: #888;
+}
+
+.note-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: 100%;
+  min-width: 0; /* 确保内容可以收缩 */
+}
+
+.note-display {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0; /* 确保内容可以收缩 */
+}
+
+.note-display-header {
+  padding: 8px 16px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.note-title-display h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.note-display-header button {
+  padding: 4px 8px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.note-display-header button:hover {
+  background-color: #218838;
+}
+
+.export-button {
+  background-color: #17a2b8 !important;
+}
+
+.export-button:hover {
+  background-color: #138496 !important;
+}
+
+.browse-notes-button {
+  background-color: #6c757d !important;
+}
+
+.browse-notes-button:hover {
+  background-color: #5a6268 !important;
+}
+
+.note-content {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  line-height: 1.6;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.note-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.editor-controls {
+  padding: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid #eee;
+  background-color: #f9f9f9;
+}
+
+.editor-mode-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.mode-button {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.mode-button.active {
+  background-color: #007bff;
+  color: white;
+  border-color: #0062cc;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.action-buttons button {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.action-buttons button:first-child {
+  background-color: #28a745;
+  color: white;
+}
+
+.action-buttons button:last-child {
+  background-color: #dc3545;
+  color: white;
+}
+
+.action-buttons button:hover:first-child {
+  background-color: #218838;
+}
+
+.action-buttons button:hover:last-child {
+  background-color: #c82333;
+}
+
+/* 分屏编辑模式 */
+.split-editor {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.editor-side, 
+.preview-side {
+  flex: 1;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.preview-side {
+  padding: 16px;
+  background-color: #fff;
+  overflow-x: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.editor-side {
+  background-color: #f9f9f9;
+  border-left: 1px solid #eee;
+}
+
+/* 纯编辑模式 */
+.normal-editor {
+  height: 100%;
+  width: 100%;
+}
+
+.note-textarea {
+  height: 100%;
+  width: 100%;
+  padding: 16px;
+  border: none;
+  resize: none;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.no-selection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #888;
+  text-align: center;
+  padding: 20px;
+}
+
+.no-notes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #888;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}
+
+.no-selection-actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+}
+
+/* 笔记面板 */
+.notes-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.3s ease;
+  width: 100%;
+  min-width: 0; /* 确保内容可以收缩 */
+}
+
+/* 分屏模式下调整字体大小 */
+.split-mode .note-content,
+.split-mode .preview-side,
+.split-mode .note-textarea {
+  font-size: 13px;
+} 

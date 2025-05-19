@@ -298,22 +298,66 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
       }
       return true;
     }
-  })(); // End of async IIFE
+
+    // 处理笔记相关消息
+    if (messageType === 'ASK_AI_ABOUT_NOTE') {
+      console.log('[ServiceWorker] 收到笔记AI查询请求:', message.query);
+      
+      try {
+        // 获取当前选择的模型
+        const { preferredModel } = await chrome.storage.sync.get('preferredModel');
+        const model = preferredModel || 'chatgpt';
+        
+        // 创建查询提示
+        const prompt = `以下是一篇Markdown笔记内容:
+\`\`\`markdown
+${message.noteContent}
+\`\`\`
+
+用户的问题是: ${message.query}
+
+请针对这篇笔记内容回答用户的问题。`;
+        
+        // 使用StreamService来处理请求
+        const responseStreamId = await StreamService.handleStreamingResponse(model, prompt);
+        
+        // 立即返回一个响应，表示已收到请求
+        sendResponse({ success: true, received: true, responseStreamId });
+        
+        // 设置监听器以捕获完整响应
+        const responseListener = (msg: any) => {
+          if (msg.type === 'STREAM_END' && msg.responseStreamId === responseStreamId) {
+            // 移除监听器
+            chrome.runtime.onMessage.removeListener(responseListener);
+            
+            // 发送完整响应给笔记页面
+            chrome.runtime.sendMessage({
+              type: 'NOTE_AI_RESPONSE',
+              answer: msg.text,
+              originalQuery: message.query,
+              responseStreamId
+            });
+          }
+        };
+        
+        // 添加监听器
+        chrome.runtime.onMessage.addListener(responseListener);
+      } catch (error) {
+        console.error('[ServiceWorker] 处理笔记AI查询失败:', error);
+        sendResponse({ success: false, error: String(error) });
+      }
+      
+      return true; // 保持sendResponse的有效性
+    }
+
+    // 如果没有匹配的消息类型，默认响应
+    sendResponse({ success: false, error: '未知的消息类型' });
+  })().catch(error => {
+    console.error('[ServiceWorker] 处理消息时发生错误:', error);
+    sendResponse({ success: false, error: String(error) });
+  });
   
-  // Return true for message types that will respond asynchronously if they are outside the IIFE
-  // For message types handled within the IIFE, sendResponse is called, so returning true is not strictly needed
-  // for them to keep the message channel open, but it doesn't hurt.
-  // However, to be safe and cover all paths, especially if some handlers are not in the IIFE:
-  if (messageType === 'ANSWER_AI_QUESTION' 
-      || messageType === 'OPEN_SIDEPANEL' 
-      || messageType === 'CLOSE_SIDEPANEL' 
-      || messageType === 'SET_MODEL' 
-      || messageType === 'GET_PAGE_INFO' 
-      || messageType === 'ASK_QUESTION' 
-      || messageType === 'TEST_MCP_SERVER') {
-      return true; // Keep channel open for async response
-  }
-  // For other synchronous message types, you might not need to return true.
+  return true; // 保持sendResponse的有效性，所有消息都是异步处理的
 });
 
 // 添加快捷键支持

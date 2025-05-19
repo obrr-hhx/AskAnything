@@ -2,10 +2,14 @@
   font-size: 14px;
   line-height: 1.6;
   word-break: break-word;
+  width: 100%;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .markdown-content p {
   margin-bottom: 16px;
+  max-width: 100%;
 }
 
 .markdown-content h1,
@@ -18,6 +22,7 @@
   margin-bottom: 16px;
   font-weight: 600;
   line-height: 1.25;
+  max-width: 100%;
 }
 
 .markdown-content h1 {
@@ -36,6 +41,7 @@
 .markdown-content ol {
   padding-left: 20px;
   margin-bottom: 16px;
+  max-width: 100%;
 }
 
 .markdown-content li {
@@ -45,6 +51,7 @@
 .markdown-content a {
   color: var(--primary-color);
   text-decoration: none;
+  word-break: break-all;
 }
 
 .markdown-content a:hover {
@@ -57,6 +64,7 @@
   border-left: 4px solid var(--border-color);
   margin: 16px 0;
   opacity: 0.8;
+  max-width: 100%;
 }
 
 .markdown-content code {
@@ -65,6 +73,9 @@
   background-color: rgba(0, 0, 0, 0.05);
   border-radius: 3px;
   font-size: 13px;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* 适应暗色模式 */
@@ -78,16 +89,27 @@
   margin: 16px 0;
   overflow: auto;
   border-radius: 6px;
+  max-width: 100%;
 }
 
 .markdown-content pre > div {
   border-radius: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.markdown-content pre code {
+  white-space: pre;
+  overflow-x: auto;
+  display: block;
 }
 
 .markdown-content table {
   border-collapse: collapse;
   width: 100%;
   margin-bottom: 16px;
+  display: block;
+  overflow-x: auto;
 }
 
 .markdown-content table th,
@@ -111,6 +133,7 @@
 .markdown-content .thinking-container {
   margin: 10px 0;
   position: relative;
+  max-width: 100%;
 }
 
 .markdown-content .thinking-details {
@@ -121,6 +144,7 @@
   /* 保持折叠状态更稳定 */
   position: relative;
   z-index: 1;
+  max-width: 100%;
 }
 
 .markdown-content .thinking-details summary {
@@ -150,6 +174,7 @@
   z-index: 1;
   overflow-x: auto;
   white-space: pre-wrap;
+  max-width: 100%;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -175,11 +200,13 @@
   overflow-y: hidden;
   padding: 0.5em 0;
   margin: 1em 0;
+  max-width: 100%;
 }
 
 /* 修复可能的锚点跳转问题 */
 .markdown-content .katex-html {
   display: block;
+  max-width: 100%;
 }
 
 /* 避免 KaTeX 内部元素影响布局 */
