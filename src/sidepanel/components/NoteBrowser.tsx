@@ -319,7 +319,18 @@ const NoteBrowser: React.FC<NoteBrowserProps> = ({ onBack: _ }) => {
       </div>
       <div className="notes-list-content">
         {notes.length === 0 ? (
-          <div className="no-notes">没有笔记，点击新建按钮创建一个或导入现有笔记</div>
+          <div className="no-notes">
+            <h3>没有笔记</h3>
+            <p>点击新建按钮创建一个或导入现有笔记</p>
+            <div className="no-selection-buttons" style={{ marginTop: '20px' }}>
+              <button className="new-note-button" onClick={createNewNote}>
+                新建笔记
+              </button>
+              <button className="import-note-button" onClick={handleImportClick}>
+                导入笔记
+              </button>
+            </div>
+          </div>
         ) : (
           notes.map(note => (
             <div 
@@ -354,8 +365,8 @@ const NoteBrowser: React.FC<NoteBrowserProps> = ({ onBack: _ }) => {
     if (!selectedNote) {
       return (
         <div className="no-selection">
-          <p>没有选择笔记</p>
-          <div className="no-selection-actions">
+          <h3>没有选择笔记</h3>
+          <div className="no-selection-buttons">
             <button className="new-note-button" onClick={createNewNote}>
               新建笔记
             </button>
