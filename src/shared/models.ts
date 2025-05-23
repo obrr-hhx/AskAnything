@@ -59,6 +59,7 @@ export interface ChatHistory {
   messages: ChatMessage[];
   model: AIModel;
   lastUpdated: number;
+  sessionId?: string; // 会话ID，用于识别和更新同一对话会话
 }
 
 // 用户设置

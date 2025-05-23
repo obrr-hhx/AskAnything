@@ -40,12 +40,34 @@ const HistoryList: React.FC = () => {
     const assistantMessage = session.messages.find(msg => msg.role === 'assistant');
     const userMessage = session.messages.find(msg => msg.role === 'user');
     
+    // 函数：移除HTML标签和思考容器内容
+    const cleanContent = (content: string): string => {
+      if (!content) return '';
+      
+      // 移除思考容器HTML
+      let cleaned = content.replace(/<div class="thinking-container"[^>]*>[\s\S]*?<\/div>/g, '');
+      
+      // 移除所有HTML标签
+      cleaned = cleaned.replace(/<[^>]*>/g, '');
+      
+      // 移除多余的空白字符
+      cleaned = cleaned.replace(/\s+/g, ' ').trim();
+      
+      return cleaned;
+    };
+    
     if (assistantMessage) {
-      // 返回AI回复的前30个字符
-      return assistantMessage.content.substring(0, 30) + (assistantMessage.content.length > 30 ? '...' : '');
-    } else if (userMessage) {
-      // 如果没有AI回复，返回用户问题
-      return userMessage.content.substring(0, 30) + (userMessage.content.length > 30 ? '...' : '');
+      const cleanedContent = cleanContent(assistantMessage.content);
+      if (cleanedContent) {
+        return cleanedContent.substring(0, 30) + (cleanedContent.length > 30 ? '...' : '');
+      }
+    }
+    
+    if (userMessage) {
+      const cleanedContent = cleanContent(userMessage.content);
+      if (cleanedContent) {
+        return cleanedContent.substring(0, 30) + (cleanedContent.length > 30 ? '...' : '');
+      }
     }
     
     return '空会话';

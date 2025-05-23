@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { AIModel, ChatMessage, ChatHistory, ContextData } from '../shared/models';
 import { getSettings, setPreferredModel } from '../shared/settings';
-import { getChatHistory, addChatSession, searchChatHistory, clearChatHistory } from '../shared/history';
+import { getChatHistory, addChatSession, searchChatHistory, clearChatHistory, cleanExistingHistory } from '../shared/history';
 import { MCPService } from '../services/mcp';
 
 // 定义状态类型
@@ -35,11 +35,13 @@ interface ChatState {
   history: ChatHistory[];
   isLoadingHistory: boolean;
   searchQuery: string;
+  currentSessionId: string | null; // 当前会话ID
   loadHistory: () => Promise<void>;
   saveSessionToHistory: () => Promise<void>;
   searchHistory: (query: string) => Promise<void>;
   loadSessionFromHistory: (sessionIndex: number) => void;
   clearHistory: () => Promise<void>;
+  startNewSession: () => void; // 开始新会话
 }
 
 // 创建存储
@@ -55,6 +57,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   history: [],
   isLoadingHistory: false,
   searchQuery: '',
+  currentSessionId: null,
   
   // Actions
   setMessages: (messages) => {
@@ -85,7 +88,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   clearMessages: () => {
     console.log('[Store] 清空消息');
-    set({ messages: [], currentContext: null });
+    set({ messages: [], currentContext: null, currentSessionId: null });
   },
   
   setIsLoading: (loading) => {
@@ -142,15 +145,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   
   saveSessionToHistory: async () => {
-    const { messages, currentModel } = get();
+    const { messages, currentModel, currentSessionId } = get();
     if (messages.length === 0 || messages.filter(m => m.role === 'assistant').length === 0) {
       console.log('[Store] No messages or no assistant messages to save to history.');
       return;
     }
 
-    console.log('[Store] 保存当前会话到历史 (using shared func)');
+    console.log('[Store] 保存当前会话到历史', { currentSessionId, messagesCount: messages.length });
     try {
-      await addChatSession(messages, currentModel);
+      // 如果当前没有会话ID，创建一个新的
+      let sessionId = currentSessionId;
+      if (!sessionId) {
+        sessionId = Date.now().toString();
+        set({ currentSessionId: sessionId });
+        console.log('[Store] 创建新的会话ID:', sessionId);
+      }
+      
+      await addChatSession(messages, currentModel, sessionId);
       console.log('[Store] 历史记录保存成功');
     } catch (error) {
       console.error('[Store] 保存历史记录失败:', error);
@@ -173,11 +184,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { history } = get();
     if (sessionIndex >= 0 && sessionIndex < history.length) {
       const session = history[sessionIndex];
-      console.log('[Store] 从历史加载会话:', sessionIndex);
+      console.log('[Store] 从历史加载会话:', sessionIndex, '会话ID:', session.sessionId);
       set({
         messages: [...session.messages],
         currentModel: session.model,
-        currentContext: session.messages[0]?.context || null
+        currentContext: session.messages[0]?.context || null,
+        currentSessionId: session.sessionId || null
       });
     }
   },
@@ -190,6 +202,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (error) {
       console.error('清除历史记录失败:', error);
     }
+  },
+  
+  startNewSession: () => {
+    set({ currentSessionId: Date.now().toString() });
   }
 }));
 
@@ -291,7 +307,7 @@ function setupMessageListener() {
       
       // 将页面滚动到底部以显示问题
       setTimeout(() => {
-        const messagesContainer = document.querySelector('.message-list');
+        const messagesContainer = document.querySelector('.messages-container');
         if (messagesContainer) {
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
@@ -449,30 +465,38 @@ function setupMessageListener() {
       const label = message.label || '思考过程';
       console.log('[Store] 创建思考容器:', containerId, '标签:', label);
       
-      // 查找或创建容器放置的位置
-      const state = useChatStore.getState();
-      const messages = state.messages;
-      
-      if (messages.length > 0) {
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage.role === 'assistant') {
-          // 创建容器HTML
-          const containerHTML = `
-<div class="thinking-container" id="container-${containerId}">
-  <details class="thinking-details" id="${containerId}">
-    <summary>${label}</summary>
-    <div class="thinking-content" id="${containerId}-content"></div>
-  </details>
-</div>`;
-          
-          // 将容器HTML添加到消息开头
-          state.updateLastMessage(containerHTML);
-          console.log('[Store] 思考容器已创建并添加到消息');
+      // 不再将HTML添加到消息内容中，而是通过DOM直接操作
+      // 查找消息列表容器
+      const messagesContainer = document.querySelector('.messages-container');
+      if (messagesContainer) {
+        const lastMessageElement = messagesContainer.lastElementChild;
+        if (lastMessageElement && lastMessageElement.classList.contains('message')) {
+          // 检查是否已存在思考容器
+          let existingContainer = lastMessageElement.querySelector(`#container-${containerId}`);
+          if (!existingContainer) {
+            // 创建思考容器DOM元素
+            const containerDiv = document.createElement('div');
+            containerDiv.className = 'thinking-container';
+            containerDiv.id = `container-${containerId}`;
+            containerDiv.innerHTML = `
+              <details class="thinking-details" id="${containerId}">
+                <summary>${label}</summary>
+                <div class="thinking-content" id="${containerId}-content"></div>
+              </details>
+            `;
+            
+            // 将容器插入到消息内容的开头
+            const messageContent = lastMessageElement.querySelector('.message-content');
+            if (messageContent) {
+              messageContent.insertBefore(containerDiv, messageContent.firstChild);
+            }
+          }
+          console.log('[Store] 思考容器已创建并添加到DOM');
         } else {
-          console.warn('[Store] 最后一条消息不是AI回复，无法添加思考容器');
+          console.warn('[Store] 未找到合适的消息元素来添加思考容器');
         }
       } else {
-        console.warn('[Store] 没有消息，无法添加思考容器');
+        console.warn('[Store] 未找到消息列表容器');
       }
       
       sendResponse?.({ success: true });
@@ -510,6 +534,9 @@ export async function initializeStore() {
     console.log('[Store] 获取到设置:', settings);
     useChatStore.setState({ currentModel: settings.preferredModel });
     
+    // 清理已存在的历史记录中的HTML内容
+    await cleanExistingHistory();
+    
     // 加载历史记录
     await useChatStore.getState().loadHistory();
     console.log('[Store] 历史记录加载完成');
@@ -532,6 +559,13 @@ export async function sendQuestion(question: string) {
   
   const userMessage = messages[messages.length - 1];
   if (userMessage.role !== 'user') return;
+  
+  // 如果当前没有会话ID，说明这是一个新对话的开始，创建新的会话ID
+  if (!state.currentSessionId) {
+    const newSessionId = Date.now().toString();
+    useChatStore.setState({ currentSessionId: newSessionId });
+    console.log('[Store] 创建新对话会话ID:', newSessionId);
+  }
   
   // 设置加载状态
   state.setIsLoading(true);

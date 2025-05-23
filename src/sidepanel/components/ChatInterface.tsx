@@ -16,7 +16,8 @@ const ChatInterface: React.FC = () => {
     currentContext,
     setContext,
     enableThinking,
-    toggleThinking
+    toggleThinking,
+    clearMessages
   } = useChatStore();
   
   const [userInput, setUserInput] = useState('');
@@ -517,6 +518,24 @@ const ChatInterface: React.FC = () => {
     setShowMCPTools(false);
   };
 
+  // 开始新对话
+  const handleNewConversation = () => {
+    // 清空当前消息和上下文
+    clearMessages();
+    // 清空输入框
+    setUserInput('');
+    // 清空上下文
+    setHasSelectedText(false);
+    setShowContext(false);
+    setContextSegments([]);
+    setIsContextExpanded(false);
+    // 聚焦到输入框
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+    console.log('[ChatInterface] 开始新对话');
+  };
+
   return (
     <div className="chat-interface">
       <div className="messages-container">
@@ -690,6 +709,20 @@ const ChatInterface: React.FC = () => {
             发送
           </button>
         )}
+        
+        {/* 新对话按钮移动到这里 */}
+        <button 
+          type="button"
+          className="new-conversation-button-small"
+          onClick={handleNewConversation}
+          title="创建新对话"
+          disabled={isLoading}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
       </form>
       
       <div className="chat-controls">

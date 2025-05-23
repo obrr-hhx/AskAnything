@@ -136,6 +136,7 @@
   padding: 12px;
   border-top: 1px solid var(--border-color);
   align-items: flex-end;
+  gap: 8px;
 }
 
 .input-container textarea {
@@ -160,7 +161,6 @@
 }
 
 .input-container button {
-  margin-left: 8px;
   background-color: var(--primary-color);
   color: white;
   border: none;
@@ -181,9 +181,40 @@
   cursor: not-allowed;
 }
 
+/* 小尺寸新对话按钮样式 */
+.new-conversation-button-small {
+  background-color: var(--border-color) !important;
+  color: var(--text-color) !important;
+  border: none;
+  border-radius: 20px;
+  padding: 0 8px !important;
+  height: 36px !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  flex-shrink: 0;
+}
+
+.new-conversation-button-small:hover:not(:disabled) {
+  background-color: var(--hover-color) !important;
+  transform: translateY(-1px);
+}
+
+.new-conversation-button-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.new-conversation-button-small svg {
+  flex-shrink: 0;
+}
+
 /* 停止生成按钮样式 */
 .stop-generate-button {
-  margin-left: 8px;
   background-color: #f44336 !important;
   color: white;
   border: none;
@@ -436,9 +467,9 @@
 /* 思考模式开关样式 */
 .thinking-toggle-container {
   display: flex;
-  justify-content: center;
-  margin-top: 8px;
-  margin-bottom: 12px;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
 }
 
 .pill-toggle {
@@ -626,36 +657,89 @@ input:checked + .pill-toggle-slider:before {
   .pill-toggle-label {
     color: #e0e0e0;
   }
+  
+  .mcp-tools-button {
+    background-color: #303134;
+  }
+  
+  .mcp-tools-button:hover {
+    background-color: #3c4043;
+  }
+  
+  .new-conversation-button-small {
+    background-color: #303134 !important;
+    color: #e8eaed !important;
+  }
+  
+  .new-conversation-button-small:hover:not(:disabled) {
+    background-color: #3c4043 !important;
+  }
 }
 
 .chat-controls {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  gap: 16px;
   margin-top: 8px;
-  margin-bottom: 8px;
 }
 
+/* 新对话按钮样式 */
+.new-conversation-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 100px;
+}
+
+.new-conversation-button:hover:not(:disabled) {
+  background-color: var(--primary-color);
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.new-conversation-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.new-conversation-button svg {
+  flex-shrink: 0;
+}
+
+/* MCP工具按钮样式调整 */
 .mcp-tools-button {
   display: flex;
   align-items: center;
-  background-color: var(--hover-color);
+  gap: 6px;
+  background-color: var(--border-color);
+  color: var(--text-color);
   border: none;
-  border-radius: 16px;
+  border-radius: 20px;
   padding: 6px 12px;
   font-size: 12px;
-  color: var(--text-color);
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
+  height: 28px;
 }
 
 .mcp-tools-button:hover {
-  background-color: var(--border-color);
+  background-color: var(--hover-color);
 }
 
 .mcp-tools-button svg {
-  margin-right: 6px;
+  flex-shrink: 0;
 }
 
 @media (prefers-color-scheme: dark) {
