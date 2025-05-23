@@ -339,7 +339,7 @@
 .preview-side {
   flex: 1;
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden; /* 移除容器的滚动条 */
   padding: 0;
   box-sizing: border-box;
   min-width: 0; /* 确保内容可以收缩 */
@@ -348,16 +348,19 @@
 .preview-side {
   border-left: 1px solid var(--border-color);
   padding: 16px;
+  overflow-y: auto; /* 预览区域需要滚动 */
 }
 
 .editor-side {
   background-color: var(--note-background);
+  overflow: hidden; /* 编辑区域不需要滚动，让textarea处理 */
 }
 
 /* 纯编辑模式 */
 .normal-editor {
   height: 100%;
   width: 100%;
+  overflow: hidden; /* 确保容器本身不产生滚动条 */
 }
 
 .note-textarea {
@@ -372,6 +375,9 @@
   background-color: var(--background-color);
   color: var(--text-color);
   outline: none;
+  overflow-y: auto; /* 只有textarea有滚动条 */
+  box-sizing: border-box;
+  min-height: 200px; /* 确保最小高度 */
 }
 
 .no-selection {

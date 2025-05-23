@@ -292,13 +292,35 @@ const NoteBrowser: React.FC<NoteBrowserProps> = ({ onBack: _ }) => {
     }
   }, [editorMode, isEditing, syncScroll]);
 
-  // 调整textarea高度
+  // 保持用户手动滚动的位置，防止输入时发生位置跳动
   useEffect(() => {
-    if (textareaRef.current && isEditing) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [editContent, isEditing]);
+    const textarea = textareaRef.current;
+    if (!textarea || !isEditing) return;
+
+    // 只保存滚动位置，不进行自动滚动
+    let savedScrollTop = textarea.scrollTop;
+
+    const handleScroll = () => {
+      savedScrollTop = textarea.scrollTop;
+    };
+
+    const handleInput = () => {
+      // 在输入时保持滚动位置，防止位置跳动
+      requestAnimationFrame(() => {
+        if (textarea.scrollTop !== savedScrollTop) {
+          textarea.scrollTop = savedScrollTop;
+        }
+      });
+    };
+
+    textarea.addEventListener('scroll', handleScroll);
+    textarea.addEventListener('input', handleInput);
+
+    return () => {
+      textarea.removeEventListener('scroll', handleScroll);
+      textarea.removeEventListener('input', handleInput);
+    };
+  }, [isEditing]);
 
   // 显示笔记列表页面
   const NotesListPage = () => (

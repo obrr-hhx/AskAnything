@@ -1,0 +1,194 @@
+/* 覆盖KaTeX的默认样式，解决行内公式显示问题 */
+
+/* 确保行内数学公式正确嵌入到文本流中 */
+.katex {
+  font-size: 1.1em;
+  display: inline-block;
+  text-rendering: auto;
+  vertical-align: -0.6em; /* 保持行内公式的下调 */
+}
+
+/* 块级公式和行内公式分开处理 */
+span.math.math-display .katex {
+  vertical-align: 0; /* 重置块级公式的垂直对齐 */
+  margin: 1em 0; /* 为块级公式添加上下边距 */
+  display: block; /* 确保完整显示 */
+}
+
+/* 确保行内公式垂直居中对齐 */
+span.math.math-inline {
+  display: inline;
+  vertical-align: baseline;
+  line-height: normal;
+  position: relative;
+}
+
+span.math.math-inline > span {
+  display: inline-block;
+  vertical-align: -0.6em; /* 保持行内公式的下调 */
+}
+
+/* 块级公式样式重置和增强 */
+span.math.math-display {
+  display: block;
+  overflow: visible;
+  text-align: center;
+  margin: 1.5em 0; /* 增加上下边距 */
+  position: relative;
+}
+
+span.math.math-display > span {
+  display: block;
+  overflow-x: auto; /* 允许水平滚动 */
+  overflow-y: visible; /* 确保垂直方向完整显示 */
+  text-align: center;
+  transform: none; /* 移除可能影响块级公式的变换 */
+}
+
+/* 修复块级公式内部元素可能被裁剪的问题 */
+.markdown-content .katex-display {
+  overflow-x: auto;
+  overflow-y: visible; /* 关键：确保垂直方向可见 */
+  padding: 1em 0;
+  margin: 1em 0;
+  max-width: 100%;
+}
+
+/* 全局修复，确保行内公式与文本基线对齐 */
+.markdown-content {
+  --formula-baseline-fix: -0.6em; /* 保持行内公式的基线修正值 */
+}
+
+/* 调整特定上下文下的行内公式对齐 */
+p > span.math.math-inline,
+li > span.math.math-inline,
+td > span.math.math-inline {
+  vertical-align: var(--formula-baseline-fix);
+  display: inline-flex;
+  align-items: baseline;
+  transform: translateY(0.45em); /* 保持行内公式的偏移量 */
+}
+
+/* 确保块级公式不受行内公式调整的影响 */
+p > span.math.math-display,
+li > span.math.math-display,
+td > span.math.math-display {
+  vertical-align: baseline;
+  display: block;
+  transform: none;
+  margin: 1.5em 0;
+}
+
+/* 改进多行段落中的公式基线对齐 */
+p > span.math.math-inline > span,
+li > span.math.math-inline > span,
+td > span.math.math-inline > span {
+  display: inline-flex;
+  align-items: baseline;
+  transform: translateY(0.1em); /* 保持内部元素的偏移 */
+}
+
+/* 修复上下标的对齐问题 - 仅对行内公式 */
+span.math.math-inline .katex .msupsub {
+  vertical-align: baseline;
+  position: relative;
+  top: 0.4em;
+}
+
+/* 重置块级公式的上下标样式 */
+span.math.math-display .katex .msupsub {
+  vertical-align: baseline;
+  position: static;
+  top: auto;
+}
+
+/* 特殊处理分数、根号等复杂公式元素 - 仅对行内公式 */
+span.math.math-inline .katex .mfrac {
+  vertical-align: -0.65em;
+}
+
+span.math.math-inline .katex .msqrt {
+  vertical-align: -0.45em;
+}
+
+/* 确保块级公式中的复杂元素正确显示 */
+span.math.math-display .katex .mfrac,
+span.math.math-display .katex .msqrt {
+  vertical-align: baseline;
+}
+
+/* 添加额外的空间以防止块级公式被截断 */
+.markdown-content span.math.math-display {
+  padding-top: 1em;
+  padding-bottom: 1em;
+  min-height: 2em; /* 确保最小高度 */
+}
+
+/* 解决行内公式换行问题 */
+.katex-html {
+  white-space: nowrap;
+}
+
+/* 针对特殊单字符公式的优化 */
+span.math.math-inline .katex .base {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+/* 改进特定公式的显示 */
+.katex .mord.mathnormal {
+  font-style: italic;
+  vertical-align: baseline;
+}
+
+/* 确保公式不会被其他元素的样式影响 */
+.markdown-content p span.math.math-inline {
+  display: inline;
+  white-space: normal;
+}
+
+.markdown-content p span.math.math-inline > span {
+  white-space: nowrap;
+  vertical-align: -0.1em;
+}
+
+/* 处理单个字符的垂直对齐 */
+.katex .mord {
+  vertical-align: baseline;
+}
+
+/* 处理希腊字母的垂直对齐 */
+.katex .mord.mathit {
+  vertical-align: -0.05em;
+}
+
+/* 调整变量与文本的对齐 */
+.katex .mrel, .katex .mbin {
+  vertical-align: -0.15em;
+}
+
+/* 优化特定字符的垂直位置 - 这些字符通常需要微调 */
+.katex .mord.mathnormal.z,
+.katex .mord.mathnormal.y,
+.katex .mord.mathnormal.x {
+  position: relative;
+  vertical-align: -0.5em; /* 更大幅度地调整特定字符 */
+}
+
+.markdown-content p, 
+.markdown-content li,
+.markdown-content td,
+.markdown-content th,
+.markdown-content div {
+  line-height: 1.7; /* 增加行高，为公式留出足够空间 */
+}
+
+/* 优化斜体字母间距 */
+.katex .mord.mathnormal {
+  margin-right: 0.02em;
+}
+
+/* 优化字符组合 */
+.katex .minner {
+  vertical-align: baseline;
+} 

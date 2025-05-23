@@ -7,6 +7,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import './MarkdownRenderer.css';
+import './katex-override.css';
 
 interface MarkdownRendererProps {
   content: string;
@@ -28,8 +29,24 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
   return (
     <div className="markdown-content">
       <ReactMarkdown
-        rehypePlugins={[rehypeRaw, rehypeKatex]} // 启用HTML内联渲染和KaTeX公式渲染
-        remarkPlugins={[remarkMath]} // 启用数学公式解析
+        rehypePlugins={[
+          rehypeRaw, 
+          [rehypeKatex, { 
+            output: 'html', 
+            throwOnError: false,
+            trust: true,
+            strict: false,
+            macros: {
+              // 添加常用的数学宏
+              "\\P": "\\mathbb{P}"
+            }
+          }]
+        ]} 
+        remarkPlugins={[
+          [remarkMath, { 
+            singleDollarTextMath: true 
+          }]
+        ]}
         components={{
           code({ node, inline, className, children, ...props }: CodeProps) {
             const match = /language-(\w+)/.exec(className || '');
@@ -47,6 +64,47 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
                 {children}
               </code>
             );
+          },
+          // 自定义span标签的渲染，确保行内公式正确显示
+          span: ({ node, className, children, ...props }) => {
+            // 为行内公式元素添加特殊处理
+            if (className && className.includes('math-inline')) {
+              return (
+                <span 
+                  className={className} 
+                  {...props} 
+                  style={{ 
+                    display: 'inline', 
+                    whiteSpace: 'nowrap',
+                    position: 'relative',
+                    verticalAlign: 'baseline',
+                    top: '0.5em' // 保持行内公式的下移
+                  }}
+                >
+                  {children}
+                </span>
+              );
+            }
+            // 为块级公式添加特殊处理
+            else if (className && className.includes('math-display')) {
+              return (
+                <span 
+                  className={className} 
+                  {...props} 
+                  style={{ 
+                    display: 'block', 
+                    overflow: 'visible',
+                    padding: '0.5em 0',
+                    margin: '1em 0',
+                    position: 'relative',
+                    width: '100%'
+                  }}
+                >
+                  {children}
+                </span>
+              );
+            }
+            return <span className={className} {...props}>{children}</span>;
           },
           // 自定义其他元素的渲染
           a: ({ node, ...props }) => (
