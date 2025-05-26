@@ -438,21 +438,39 @@ function setupMessageListener() {
       const content = message.content;
       console.log('[Store] 更新思考内容:', containerId, '内容长度:', content.length);
       
-      // 查找元素并更新
-      const reasoningContentElement = document.getElementById(`${containerId}-content`);
-      if (reasoningContentElement) {
-        console.log('[Store] 找到推理内容元素，更新内容');
-        
-        if (message.type === 'FINAL_REASONING_UPDATE') {
-          // 最终更新，直接替换全部内容
-          reasoningContentElement.innerHTML = '';
-          reasoningContentElement.appendChild(document.createTextNode(content));
-        } else {
-          // 增量更新，添加到已有内容
-          reasoningContentElement.appendChild(document.createTextNode(content));
+      // 更新消息内容中的思考容器内容
+      if (state.messages.length > 0) {
+        const lastMessage = state.messages[state.messages.length - 1];
+        if (lastMessage.role === 'assistant') {
+          // 查找并更新思考容器内容
+          const contentDivId = `${containerId}-content`;
+          const regex = new RegExp(`(<div class="thinking-content" id="${contentDivId}">)([^<]*)(</div>)`);
+          
+          let updatedContent = lastMessage.content;
+          if (message.type === 'FINAL_REASONING_UPDATE') {
+            // 最终更新，直接替换全部内容
+            updatedContent = updatedContent.replace(regex, `$1${content}$3`);
+          } else {
+            // 增量更新，添加到已有内容
+            updatedContent = updatedContent.replace(regex, (_, start, existing, end) => {
+              return `${start}${existing}${content}${end}`;
+            });
+          }
+          
+          if (updatedContent !== lastMessage.content) {
+            const updatedMessage = {
+              ...lastMessage,
+              content: updatedContent
+            };
+            
+            const updatedMessages = [
+              ...state.messages.slice(0, -1),
+              updatedMessage
+            ];
+            state.setMessages(updatedMessages);
+            console.log('[Store] 思考内容已更新到消息中');
+          }
         }
-      } else {
-        console.warn('[Store] 未找到推理内容容器元素:', containerId);
       }
       
       sendResponse?.({ success: true });
@@ -465,38 +483,34 @@ function setupMessageListener() {
       const label = message.label || '思考过程';
       console.log('[Store] 创建思考容器:', containerId, '标签:', label);
       
-      // 不再将HTML添加到消息内容中，而是通过DOM直接操作
-      // 查找消息列表容器
-      const messagesContainer = document.querySelector('.messages-container');
-      if (messagesContainer) {
-        const lastMessageElement = messagesContainer.lastElementChild;
-        if (lastMessageElement && lastMessageElement.classList.contains('message')) {
-          // 检查是否已存在思考容器
-          let existingContainer = lastMessageElement.querySelector(`#container-${containerId}`);
-          if (!existingContainer) {
-            // 创建思考容器DOM元素
-            const containerDiv = document.createElement('div');
-            containerDiv.className = 'thinking-container';
-            containerDiv.id = `container-${containerId}`;
-            containerDiv.innerHTML = `
-              <details class="thinking-details" id="${containerId}">
-                <summary>${label}</summary>
-                <div class="thinking-content" id="${containerId}-content"></div>
-              </details>
-            `;
-            
-            // 将容器插入到消息内容的开头
-            const messageContent = lastMessageElement.querySelector('.message-content');
-            if (messageContent) {
-              messageContent.insertBefore(containerDiv, messageContent.firstChild);
-            }
-          }
-          console.log('[Store] 思考容器已创建并添加到DOM');
-        } else {
-          console.warn('[Store] 未找到合适的消息元素来添加思考容器');
+      // 创建思考容器HTML，确保与MarkdownRenderer兼容
+      const containerHTML = `
+<div class="thinking-container" id="container-${containerId}">
+<details class="thinking-details" id="${containerId}">
+<summary>${label}</summary>
+<div class="thinking-content" id="${containerId}-content"></div>
+</details>
+</div>
+
+`;
+      
+      // 添加到最后一条助手消息的内容前面
+      if (state.messages.length > 0) {
+        const lastMessage = state.messages[state.messages.length - 1];
+        if (lastMessage.role === 'assistant') {
+          const updatedMessage = {
+            ...lastMessage,
+            content: containerHTML + lastMessage.content
+          };
+          
+          // 更新消息数组
+          const updatedMessages = [
+            ...state.messages.slice(0, -1),
+            updatedMessage
+          ];
+          state.setMessages(updatedMessages);
+          console.log('[Store] 思考容器HTML已添加到消息内容');
         }
-      } else {
-        console.warn('[Store] 未找到消息列表容器');
       }
       
       sendResponse?.({ success: true });
@@ -533,6 +547,13 @@ export async function initializeStore() {
     const settings = await getSettings();
     console.log('[Store] 获取到设置:', settings);
     useChatStore.setState({ currentModel: settings.preferredModel });
+    
+    // 加载思考模式设置
+    chrome.storage.sync.get('enableThinking', (result) => {
+      const enableThinking = result.enableThinking || false;
+      console.log('[Store] 加载思考模式设置:', enableThinking);
+      useChatStore.setState({ enableThinking });
+    });
     
     // 清理已存在的历史记录中的HTML内容
     await cleanExistingHistory();
