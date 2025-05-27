@@ -7,6 +7,8 @@ import { createOpenAIClient, streamOpenAICompletion } from '../shared/api-client
 export class OpenAIProvider extends BaseProvider {
   // 存储当前对话的工具调用
   private toolCalls: Map<string, any> = new Map();
+  // 存储对话历史消息
+  private messages: any[] = [];
   
   /**
    * 创建OpenAI客户端
@@ -23,22 +25,33 @@ export class OpenAIProvider extends BaseProvider {
    */
   public async processQuestion(question: string, context?: any): Promise<void> {
     try {
-      // 构建系统消息
-      let systemMessage = '你是AskAnything, 一个有帮助的AI助手。主要职责是帮助用户更高效的学习，回答用户的问题。';
-      if (context) {
-        if (context.text) {
-          systemMessage += `用户选择的文本是: "${context.text}". `;
+      // 检查是否是首次对话（消息数组为空）
+      const isFirstMessage = this.messages.length === 0;
+      
+      if (isFirstMessage) {
+        // 构建系统消息
+        let systemMessage = '你是AskAnything, 一个有帮助的AI助手。主要职责是帮助用户更高效的学习，回答用户的问题。';
+        if (context) {
+          if (context.text) {
+            systemMessage += `用户选择的文本是: "${context.text}". `;
+          }
+          if (context.url && context.title) {
+            systemMessage += `当前网页是: ${context.title} (${context.url}). `;
+          }
         }
-        if (context.url && context.title) {
-          systemMessage += `当前网页是: ${context.title} (${context.url}). `;
-        }
+        
+        // 初始化消息数组（仅首次）
+        this.messages = [
+          { role: 'system', content: systemMessage }
+        ];
+        
+        console.log('[OpenAIProvider] 初始化新对话，系统消息已设置');
+      } else {
+        console.log(`[OpenAIProvider] 继续多轮对话，当前历史消息数量: ${this.messages.length}`);
       }
       
-      // 构建消息数组
-      const messages = [
-        { role: 'system', content: systemMessage },
-        { role: 'user', content: question }
-      ];
+      // 添加用户消息到历史记录
+      this.messages.push({ role: 'user', content: question });
 
       // 创建客户端
       const openaiClient = this.createClient();
@@ -47,7 +60,7 @@ export class OpenAIProvider extends BaseProvider {
       // 获取流式响应
       const stream = await streamOpenAICompletion(
         openaiClient,
-        messages,
+        this.messages,
         this.requestConfig.modelName,
         { signal: this.requestConfig.signal }
       );
@@ -70,8 +83,7 @@ export class OpenAIProvider extends BaseProvider {
       // 通知错误
       this.handlers.onError(error);
       
-      // 清理资源
-      this.destroy();
+      // 注意：不在这里调用destroy()，以保持对话历史
     }
   }
 
@@ -128,12 +140,17 @@ export class OpenAIProvider extends BaseProvider {
         }
       }
       
+      // 将assistant的回答添加到消息历史中
+      if (fullText) {
+        this.messages.push({ role: 'assistant', content: fullText });
+        console.log(`[OpenAIProvider] 已将assistant回答添加到消息历史，历史消息数量: ${this.messages.length}`);
+      }
+      
       // 流结束，通知完成
       console.log('[OpenAIProvider] OpenAI流响应完成, 总长度:', fullText.length);
       this.handlers.onComplete(fullText);
       
-      // 清理资源
-      this.destroy();
+      // 注意：不再在这里调用destroy()，因为我们要保持对话历史
     } catch (error: any) {
       console.error('[OpenAIProvider] 处理流式响应出错:', error);
       this.handlers.onError(error);

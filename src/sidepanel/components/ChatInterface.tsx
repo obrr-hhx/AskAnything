@@ -16,7 +16,8 @@ const ChatInterface: React.FC = () => {
     currentContext,
     setContext,
     enableThinking,
-    clearMessages
+    clearMessages,
+    saveSessionToHistory
   } = useChatStore();
   
   const [userInput, setUserInput] = useState('');
@@ -518,7 +519,19 @@ const ChatInterface: React.FC = () => {
   };
 
   // 开始新对话
-  const handleNewConversation = () => {
+  const handleNewConversation = async () => {
+    // 在清空之前，先检查是否有需要保存的对话
+    // 如果有消息且包含AI回答，则保存到历史记录
+    if (messages.length > 0 && messages.some(m => m.role === 'assistant' && m.content.trim())) {
+      console.log('[ChatInterface] 保存当前对话到历史记录后再开始新对话');
+      try {
+        await saveSessionToHistory();
+        console.log('[ChatInterface] 当前对话已保存到历史记录');
+      } catch (error) {
+        console.warn('[ChatInterface] 保存对话到历史记录失败:', error);
+      }
+    }
+    
     // 清空当前消息和上下文
     clearMessages();
     // 清空输入框
@@ -532,6 +545,18 @@ const ChatInterface: React.FC = () => {
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
+    
+    // 发送清空会话消息给service worker，清空Provider的对话历史
+    chrome.runtime.sendMessage({
+      type: 'CLEAR_CONVERSATION'
+    }, (response) => {
+      if (response?.success) {
+        console.log('[ChatInterface] Provider会话历史已清空:', response.cleared ? '成功' : '未找到会话');
+      } else {
+        console.warn('[ChatInterface] 清空Provider会话历史失败:', response?.error);
+      }
+    });
+    
     console.log('[ChatInterface] 开始新对话');
   };
 

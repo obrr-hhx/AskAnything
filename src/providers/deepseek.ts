@@ -5,6 +5,9 @@ import { createDeepSeekClient, streamDeepSeekCompletion } from '../shared/api-cl
  * DeepSeek提供商的实现
  */
 export class DeepSeekProvider extends BaseProvider {
+  // 存储对话历史消息
+  private messages: any[] = [];
+
   /**
    * 创建DeepSeek客户端
    */
@@ -20,22 +23,33 @@ export class DeepSeekProvider extends BaseProvider {
    */
   public async processQuestion(question: string, context?: any): Promise<void> {
     try {
-      // 构建系统消息
-      let systemMessage = '你是AskAnything, 一个有帮助的AI助手。主要职责是帮助用户更高效的学习，回答用户的问题。';
-      if (context) {
-        if (context.text) {
-          systemMessage += `用户选择的文本是: "${context.text}". `;
+      // 检查是否是首次对话（消息数组为空）
+      const isFirstMessage = this.messages.length === 0;
+      
+      if (isFirstMessage) {
+        // 构建系统消息
+        let systemMessage = '你是AskAnything, 一个有帮助的AI助手。主要职责是帮助用户更高效的学习，回答用户的问题。';
+        if (context) {
+          if (context.text) {
+            systemMessage += `用户选择的文本是: "${context.text}". `;
+          }
+          if (context.url && context.title) {
+            systemMessage += `当前网页是: ${context.title} (${context.url}). `;
+          }
         }
-        if (context.url && context.title) {
-          systemMessage += `当前网页是: ${context.title} (${context.url}). `;
-        }
+        
+        // 初始化消息数组（仅首次）
+        this.messages = [
+          { role: 'system', content: systemMessage }
+        ];
+        
+        console.log('[DeepSeekProvider] 初始化新对话，系统消息已设置');
+      } else {
+        console.log(`[DeepSeekProvider] 继续多轮对话，当前历史消息数量: ${this.messages.length}`);
       }
       
-      // 构建消息数组
-      const messages = [
-        { role: 'system', content: systemMessage },
-        { role: 'user', content: question }
-      ];
+      // 添加用户消息到历史记录
+      this.messages.push({ role: 'user', content: question });
       
       // 创建客户端
       const deepseekClient = this.createClient();
@@ -44,7 +58,7 @@ export class DeepSeekProvider extends BaseProvider {
       // 获取流式响应
       const stream = await streamDeepSeekCompletion(
         deepseekClient,
-        messages as any,
+        this.messages as any,
         this.requestConfig.modelName,
         { signal: this.requestConfig.signal }
       );
@@ -139,6 +153,19 @@ export class DeepSeekProvider extends BaseProvider {
       if (reasoningText && isReasoningModel && hasCreatedReasoningContainer) {
         console.log('[DeepSeekProvider] 流结束，确保推理内容已完全更新, 长度:', reasoningText.length, '字节');
         this.handlers.onFinalUpdate(reasoningText, reasoningContainerId);
+      }
+      
+      // 将assistant的回答添加到消息历史中
+      if (fullText || reasoningText) {
+        // 对于推理模型，将推理内容和答案内容组合
+        let assistantContent = fullText;
+        if (isReasoningModel && reasoningText) {
+          // 使用特殊格式保存推理内容
+          assistantContent = `<thinking>${reasoningText}</thinking>${fullText}`;
+        }
+        
+        this.messages.push({ role: 'assistant', content: assistantContent });
+        console.log(`[DeepSeekProvider] 已将assistant回答添加到消息历史，历史消息数量: ${this.messages.length}`);
       }
       
       // 流结束，通知完成

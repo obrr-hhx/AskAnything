@@ -181,14 +181,20 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
       // 立即返回一个响应，表示已收到请求
       sendResponse({ success: true, received: true });
       
-      // 使用StreamService处理流式响应
-      StreamService.handleStreamingResponse(model, question, message.context)
-        .then(responseStreamId => {
-          console.log('[ServiceWorker] 流处理已启动，streamId:', responseStreamId);
-        })
-        .catch(error => {
-          console.error('[ServiceWorker] 启动流处理出错:', error);
-        });
+      // 获取当前标签页ID作为sessionId，以保持多轮对话历史
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const sessionId = tabs[0]?.id ? `tab-${tabs[0].id}` : `session-${Date.now()}`;
+        console.log(`[ServiceWorker] 使用sessionId: ${sessionId} 进行多轮对话`);
+        
+        // 使用StreamService处理流式响应
+        StreamService.handleStreamingResponse(model, question, message.context, sessionId)
+          .then(responseStreamId => {
+            console.log('[ServiceWorker] 流处理已启动，streamId:', responseStreamId);
+          })
+          .catch(error => {
+            console.error('[ServiceWorker] 启动流处理出错:', error);
+          });
+      });
       
       // 必须返回true以保持sendResponse有效
       return true;
@@ -211,6 +217,25 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
       }
       
       sendResponse({ success: true });
+      return true;
+    }
+    
+    if (messageType === 'CLEAR_CONVERSATION') {
+      console.log('[ServiceWorker] 收到清空对话请求');
+      
+      // 获取当前标签页ID作为sessionId
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const sessionId = tabs[0]?.id ? `tab-${tabs[0].id}` : null;
+        if (sessionId) {
+          const cleared = StreamService.clearProviderSession(sessionId);
+          console.log(`[ServiceWorker] 清理会话 ${sessionId}:`, cleared ? '成功' : '未找到');
+          sendResponse({ success: true, cleared });
+        } else {
+          console.warn('[ServiceWorker] 无法获取当前标签页ID');
+          sendResponse({ success: false, error: '无法获取当前标签页ID' });
+        }
+      });
+      
       return true;
     }
     
@@ -380,4 +405,5 @@ chrome.commands.onCommand.addListener((command) => {
 // 定期清理过期流
 setInterval(() => {
   StreamService.cleanupExpiredStreams();
+  StreamService.cleanupProviderPool(); // 同时清理Provider实例池
 }, 10 * 60 * 1000); // 每10分钟清理一次

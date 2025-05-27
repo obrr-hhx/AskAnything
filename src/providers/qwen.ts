@@ -42,22 +42,33 @@ export class QwenProvider extends BaseProvider {
    */
   public async processQuestion(question: string, context?: any): Promise<void> {
     try {
-      // 构建系统消息
-      let systemMessage = '你是AskAnything, 一个有帮助的AI助手。主要职责是帮助用户更高效的学习，回答用户的问题。';
-      if (context) {
-        if (context.text) {
-          systemMessage += `用户选择的文本是: "${context.text}". `;
+      // 检查是否是首次对话（消息数组为空）
+      const isFirstMessage = this.messages.length === 0;
+      
+      if (isFirstMessage) {
+        // 构建系统消息
+        let systemMessage = '你是AskAnything, 一个有帮助的AI助手。主要职责是帮助用户更高效的学习，回答用户的问题。';
+        if (context) {
+          if (context.text) {
+            systemMessage += `用户选择的文本是: "${context.text}". `;
+          }
+          if (context.url && context.title) {
+            systemMessage += `当前网页是: ${context.title} (${context.url}). `;
+          }
         }
-        if (context.url && context.title) {
-          systemMessage += `当前网页是: ${context.title} (${context.url}). `;
-        }
+        
+        // 初始化消息数组（仅首次）
+        this.messages = [
+          { role: 'system', content: systemMessage }
+        ];
+        
+        console.log('[QwenProvider] 初始化新对话，系统消息已设置');
+      } else {
+        console.log(`[QwenProvider] 继续多轮对话，当前历史消息数量: ${this.messages.length}`);
       }
       
-      // 构建消息数组
-      this.messages = [
-        { role: 'system', content: systemMessage },
-        { role: 'user', content: question }
-      ];
+      // 添加用户消息到历史记录
+      this.messages.push({ role: 'user', content: question });
       
       await this.prepareMCPMode();
 
@@ -272,6 +283,11 @@ export class QwenProvider extends BaseProvider {
           await this.handleToolResponses(toolResponses, assistantToolCalls, accumulatedReasoningForMessages, accumulatedContentForMessages, currentReasoningContainerId, currentHasCreatedContainer);
           return; // Important: The recursive call to handleStream will handle onComplete/onFinalUpdate
         }
+      } else {
+        this.messages.push({
+          role: 'assistant',
+          content: "<think>" + reasoningText + "</think>" + answerText,
+        });
       }
     
       // If this stream is completing (no further tool calls from this part)

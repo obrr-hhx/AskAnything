@@ -2,6 +2,7 @@ import { AIModel } from '../models/config';
 import { ProviderFactory } from '../factories/provider-factory';
 import { ConfigService } from './config';
 import { StreamEventHandlers, RequestConfig } from '../providers/base';
+import { BaseProvider } from '../providers/base';
 
 /**
  * 活动流记录
@@ -10,6 +11,7 @@ interface ActiveStream {
   abortController: AbortController;
   model: AIModel;
   timestamp: number;
+  provider?: BaseProvider; // 添加Provider实例引用
 }
 
 /**
@@ -19,18 +21,22 @@ interface ActiveStream {
 export class StreamService {
   // 活动流记录
   private static activeStreams: Record<string, ActiveStream> = {};
+  // Provider实例池，按sessionId分组
+  private static providerPool: Record<string, BaseProvider> = {};
   
   /**
    * 处理流式响应
    * @param model AI模型
    * @param question 用户问题
    * @param context 上下文
+   * @param sessionId 会话ID，用于保持多轮对话历史
    * @returns 响应流ID
    */
   public static async handleStreamingResponse(
     model: AIModel, 
     question: string, 
-    context: any = null
+    context: any = null,
+    sessionId?: string
   ): Promise<string> {
     // 生成响应流ID
     const responseStreamId = Date.now().toString();
@@ -75,7 +81,8 @@ export class StreamService {
       this.activeStreams[responseStreamId] = {
         abortController,
         model,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        provider: sessionId ? this.providerPool[sessionId] : undefined
       };
       
       // 构建系统消息
@@ -182,9 +189,36 @@ export class StreamService {
         }
       };
       
-      // 创建提供商并处理问题
-      const provider = ProviderFactory.createProvider(requestConfig, responseStreamId, handlers);
+      // 检查是否有现有的Provider实例可以复用
+      let provider: BaseProvider;
+      if (sessionId && this.providerPool[sessionId]) {
+        provider = this.providerPool[sessionId];
+        console.log(`[StreamService] 复用现有Provider实例, sessionId: ${sessionId}`);
+        
+        // 更新Provider的responseStreamId和handlers
+        (provider as any).responseStreamId = responseStreamId;
+        (provider as any).handlers = handlers;
+        
+        // 更新requestConfig中的signal
+        (provider as any).requestConfig.signal = abortController.signal;
+        
+        // 更新最后活动时间
+        (provider as any).lastActiveTime = Date.now();
+      } else {
+        // 创建新的Provider实例
+        provider = ProviderFactory.createProvider(requestConfig, responseStreamId, handlers);
+        console.log(`[StreamService] 创建新Provider实例, sessionId: ${sessionId || '无'}`);
+        
+        // 设置初始活动时间
+        (provider as any).lastActiveTime = Date.now();
+      }
+      
       await provider.processQuestion(question, context);
+      
+      // 如果sessionId存在，将provider添加到providerPool
+      if (sessionId) {
+        this.providerPool[sessionId] = provider;
+      }
       
       return responseStreamId;
     } catch (error: any) {
@@ -273,5 +307,50 @@ export class StreamService {
         delete this.activeStreams[streamId];
       }
     }
+  }
+  
+  /**
+   * 清理Provider实例池中过期的实例
+   * @param maxIdleMs 最大空闲时间(毫秒)
+   */
+  public static cleanupProviderPool(maxIdleMs: number = 10 * 60 * 1000) {
+    const now = Date.now();
+    
+    for (const [sessionId, provider] of Object.entries(this.providerPool)) {
+      // 检查Provider是否长时间未使用
+      const lastActiveTime = (provider as any).lastActiveTime || 0;
+      if (now - lastActiveTime > maxIdleMs) {
+        console.log(`[StreamService] 清理空闲Provider实例: ${sessionId}, 空闲时间: ${Math.floor((now - lastActiveTime) / 1000)} 秒`);
+        
+        try {
+          provider.destroy();
+        } catch (error) {
+          console.error(`[StreamService] 销毁Provider实例 ${sessionId} 时出错:`, error);
+        }
+        
+        delete this.providerPool[sessionId];
+      }
+    }
+  }
+  
+  /**
+   * 手动清理指定会话的Provider实例
+   * @param sessionId 会话ID
+   */
+  public static clearProviderSession(sessionId: string): boolean {
+    if (this.providerPool[sessionId]) {
+      console.log(`[StreamService] 手动清理Provider会话: ${sessionId}`);
+      
+      try {
+        this.providerPool[sessionId].destroy();
+      } catch (error) {
+        console.error(`[StreamService] 销毁Provider实例 ${sessionId} 时出错:`, error);
+      }
+      
+      delete this.providerPool[sessionId];
+      return true;
+    }
+    
+    return false;
   }
 } 
