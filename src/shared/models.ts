@@ -29,6 +29,11 @@ export interface ContextData {
   textSegments?: string[];
   enableThinking?: boolean;
   useMCP?: boolean;
+  
+  // 图片相关字段
+  hasImage?: boolean;
+  imageUrl?: string;
+  originalQuestion?: string;
 }
 
 // 消息结构
@@ -52,6 +57,11 @@ export interface ChatMessage {
   
   // 用户回答相关字段
   isAnswer?: boolean;
+  
+  // 图片相关字段
+  hasImage?: boolean;
+  imageUrl?: string;
+  imageFile?: File;
 }
 
 // 聊天历史

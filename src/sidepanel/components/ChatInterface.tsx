@@ -4,6 +4,7 @@ import { ChatMessage } from '../../shared/models';
 import MarkdownRenderer from './MarkdownRenderer';
 import HistoryList from './HistoryList';
 import MCPToolsViewer from './MCPToolsViewer';
+import ImageUploader from './ImageUploader';
 import './ChatInterface.css';
 import { debounce } from 'lodash';
 
@@ -26,6 +27,12 @@ const ChatInterface: React.FC = () => {
   const [isContextExpanded, setIsContextExpanded] = useState(false);
   const [contextSegments, setContextSegments] = useState<string[]>([]);
   const [showMCPTools, setShowMCPTools] = useState(false);
+  
+  // 图片上传相关状态
+  const [selectedImage, setSelectedImage] = useState<string>('');
+  // @ts-ignore - 保存原始文件对象，用于未来可能的文件上传需求
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -386,16 +393,31 @@ const ChatInterface: React.FC = () => {
       });
   };
 
-  // 处理停止生成
+  // 停止生成
   const handleStopGeneration = () => {
     stopGeneration();
+  };
+
+  // 处理图片选择
+  const handleImageSelect = (file: File, dataUrl: string) => {
+    setSelectedImageFile(file);
+    setSelectedImage(dataUrl);
+    console.log('[ChatInterface] 图片已选择:', file.name, file.size);
+  };
+
+  // 移除选择的图片
+  const handleImageRemove = () => {
+    setSelectedImageFile(null);
+    setSelectedImage('');
+    console.log('[ChatInterface] 图片已移除');
   };
 
   // 处理发送消息
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!userInput.trim() || isLoading) return;
+    // 检查是否有输入内容或图片
+    if ((!userInput.trim() && !selectedImage) || isLoading) return;
     
     // 获取最新消息，检查是否是AI提问
     if (messages.length > 0) {
@@ -414,15 +436,93 @@ const ChatInterface: React.FC = () => {
         return; // 不执行后续的发送消息逻辑
       }
     }
+
+    // 构建消息内容，支持图片
+    let messageContent = userInput || '';
     
-    // 添加用户消息
-    useChatStore.getState().addMessage({
+    // 如果有选择的图片，则优先处理图片理解
+    if (selectedImage && currentModel === 'qwen3') {
+      // 如果没有文本输入，使用默认问题
+      if (!userInput.trim()) {
+        messageContent = '请分析这张图片';
+      }
+      
+      // 创建包含图片的上下文
+      const imageContext = {
+        ...currentContext,
+        hasImage: true,
+        imageUrl: selectedImage,
+        originalQuestion: messageContent
+      };
+      
+      // 创建包含图片的消息
+      const imageMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: messageContent,
+        timestamp: Date.now(),
+        context: imageContext,
+        hasImage: true,
+        imageUrl: selectedImage
+      };
+      
+      // 添加用户消息到界面
+      useChatStore.getState().addMessage(imageMessage);
+      
+      // 构建带有图片理解工具调用的问题
+      const imageAnalysisQuestion = messages.length > 1 
+        ? `我上传了一张新图片，请帮我分析。我的问题是：${messageContent}` 
+        : `我上传了一张图片，请帮我分析。我的问题是：${messageContent}`;
+      
+      console.log('[ChatInterface] 发送带图片的消息，将自动调用图片理解工具', 
+        messages.length > 1 ? '(多轮对话中的新图片)' : '(首次图片)');
+      
+      // 更新当前上下文，包含图片信息
+      setContext(imageContext);
+      
+      // 清空输入和图片
+      setUserInput('');
+      setSelectedImage('');
+      setSelectedImageFile(null);
+      
+      // 延迟发送问题，包含图片分析指令
+      setTimeout(() => {
+        try {
+          sendQuestion(imageAnalysisQuestion);
+        } catch(error) {
+          console.error('[ChatInterface] 发送图片分析问题失败:', error);
+        }
+      }, 10);
+      
+      // 延迟清除图片相关的上下文信息，确保图片分析请求已发送
+      setTimeout(() => {
+        // 创建新的上下文，移除图片相关信息
+        const cleanContext = {
+          text: currentContext?.text || '',
+          url: currentContext?.url || '',
+          title: currentContext?.title || '',
+          textSegments: currentContext?.textSegments || [],
+          enableThinking: currentContext?.enableThinking
+          // 移除 hasImage, imageUrl, originalQuestion
+        };
+        setContext(cleanContext);
+        console.log('[ChatInterface] 已清除图片相关上下文信息');
+      }, 100);
+      
+      return;
+    }
+    
+    // 普通文本消息处理
+    const textMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: userInput,
+      content: messageContent,
       timestamp: Date.now(),
       context: currentContext || undefined
-    });
+    };
+    
+    // 添加用户消息
+    useChatStore.getState().addMessage(textMessage);
     
     // 清空输入
     setUserInput('');
@@ -430,7 +530,7 @@ const ChatInterface: React.FC = () => {
     // 延迟发送问题，确保UI更新后再处理
     setTimeout(() => {
       try {
-        sendQuestion(userInput);
+        sendQuestion(messageContent);
       } catch(error) {
         console.error('[ChatInterface] 发送问题失败:', error);
       }
@@ -541,6 +641,9 @@ const ChatInterface: React.FC = () => {
     setShowContext(false);
     setContextSegments([]);
     setIsContextExpanded(false);
+    // 清空图片选择
+    setSelectedImage('');
+    setSelectedImageFile(null);
     // 聚焦到输入框
     if (textareaRef.current) {
       textareaRef.current.focus();
@@ -588,7 +691,15 @@ const ChatInterface: React.FC = () => {
                   <MarkdownRenderer content={message.content} />
                 )
               ) : (
-                message.content
+                // 用户消息，支持图片显示
+                <>
+                  {message.hasImage && message.imageUrl && (
+                    <div className="message-image">
+                      <img src={message.imageUrl} alt="用户上传的图片" />
+                    </div>
+                  )}
+                  <div className="message-text">{message.content}</div>
+                </>
               )}
             </div>
             <div className="message-actions">
@@ -727,7 +838,7 @@ const ChatInterface: React.FC = () => {
               // 如果是AI提问模式，只要有输入内容就允许提交
               (messages.length > 0 && messages[messages.length - 1].isAIQuestion)
                 ? !userInput.trim()
-                : isLoading || !userInput.trim()
+                : isLoading || (!userInput.trim() && !selectedImage)
             }
           >
             发送
@@ -764,6 +875,14 @@ const ChatInterface: React.FC = () => {
               </label>
               <span className="pill-toggle-label">思考模式</span>
             </div>
+
+            {/* 图片上传按钮 */}
+            <ImageUploader
+              onImageSelect={handleImageSelect}
+              onRemove={handleImageRemove}
+              selectedImage={selectedImage}
+              disabled={isLoading}
+            />
 
             <button 
               className="mcp-tools-button"

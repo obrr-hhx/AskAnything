@@ -102,8 +102,31 @@ export const webSearchTool: ChatCompletionTool = {
     },
 };
 
+// 图片理解工具
+export const imageUnderstandingTool: ChatCompletionTool = {
+    type: "function",
+    function: {
+        name: "understand_image",
+        description: "分析和理解用户上传的图片内容，提供详细的描述和解读",
+        parameters: {
+            type: "object",
+            properties: {
+                image_url: {
+                    type: "string",
+                    description: "图片的base64数据URL或网络URL"
+                },
+                question: {
+                    type: "string", 
+                    description: "用户对图片提出的具体问题，如果没有具体问题则使用'请描述这张图片'"
+                }
+            },
+            required: ["image_url"]
+        },
+    },
+};
+
 // 所有自定义工具列表
-export const customTools = [taskCompletionTool, askQuestionTool, webSearchTool];
+export const customTools = [taskCompletionTool, askQuestionTool, webSearchTool, imageUnderstandingTool];
 
 // 生成唯一用户ID
 const user_id = uuidv4();
@@ -221,6 +244,121 @@ export async function taskComplete(): Promise<ToolResponse> {
     };
 }
 
+// 图片理解工具实现
+export async function understandImage(toolArg: any): Promise<ToolResponse> {
+    try {
+        console.log("[图片理解工具] 开始分析图片");
+        
+        // 获取API密钥 - 修正为使用qwen而不是qwen3
+        const data = await chrome.storage.local.get(['apiKeys']);
+        const apiKeys = data.apiKeys || {};
+        const api_key = apiKeys['qwen3'] || '';
+        
+        if (!api_key) {
+            return {
+                status: 'error',
+                content: null,
+                error: "未设置通义千问API密钥",
+                message: "请在选项页面设置通义千问API密钥以使用图片理解功能"
+            };
+        }
+
+        const image_url = toolArg.image_url;
+        const question = toolArg.question || "请详细描述这张图片的内容";
+
+        if (!image_url) {
+            return {
+                status: 'error',
+                content: null,
+                error: "缺少图片URL",
+                message: "请提供要分析的图片"
+            };
+        }
+
+        // 调用DashScope VLM API - 修正为正确的格式
+        const response = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${api_key}`
+            },
+            body: JSON.stringify({
+                model: "qwen-vl-plus",
+                messages: [
+                    {
+                        role: "system",
+                        content: [
+                            {
+                                type: "text", 
+                                text: "你是一个有帮助的AI助手，擅长分析和描述图片内容。"
+                            }
+                        ]
+                    },
+                    {
+                        role: "user",
+                        content: [
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: image_url
+                                }
+                            },
+                            {
+                                type: "text",
+                                text: question
+                            }
+                        ]
+                    }
+                ]
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("[图片理解工具] API请求失败:", errorText);
+            return {
+                status: 'error',
+                content: null,
+                error: `DashScope API请求失败: ${response.status} ${response.statusText}`,
+                message: errorText
+            };
+        }
+
+        const result = await response.json();
+        console.log("[图片理解工具] API响应:", result);
+
+        // 修正响应解析 - 直接使用choices而不是output.choices
+        if (result.choices && result.choices[0]) {
+            const analysis = result.choices[0].message.content;
+            return {
+                status: 'success',
+                content: {
+                    analysis,
+                    image_url: image_url,
+                    question: question
+                },
+                message: "图片分析完成"
+            };
+        } else {
+            return {
+                status: 'error',
+                content: null,
+                error: "API返回格式异常",
+                message: "无法解析图片分析结果"
+            };
+        }
+
+    } catch (error) {
+        console.error("[图片理解工具] 执行失败:", error);
+        return {
+            status: 'error',
+            content: null,
+            error: error instanceof Error ? error.message : String(error),
+            message: "图片分析过程中发生错误"
+        };
+    }
+}
+
 // 自定义工具执行器类
 export class CustomToolExecutor {
     private tools: ChatCompletionTool[];
@@ -235,7 +373,8 @@ export class CustomToolExecutor {
         this.toolsMap = {
             "web_search": webSearch,
             "ask_question": (args: any) => askQuestion(args, this.messageSender),
-            "task_complete": taskComplete
+            "task_complete": taskComplete,
+            "understand_image": understandImage
         };
     }
 

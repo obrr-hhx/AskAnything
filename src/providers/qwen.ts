@@ -67,8 +67,97 @@ export class QwenProvider extends BaseProvider {
         console.log(`[QwenProvider] 继续多轮对话，当前历史消息数量: ${this.messages.length}`);
       }
       
+      // 检查是否包含图片，如果有则自动调用图片理解工具
+      if (context?.hasImage && context?.imageUrl) {
+        console.log('[QwenProvider] 检测到图片，自动调用图片理解工具');
+        
+        // 添加用户消息到历史记录
+        this.messages.push({ role: 'user', content: question });
+        
+        // 创建自定义工具执行器
+        const messageSender = async (content: string) => {
+          this.handlers.onToken(content);
+          return { success: true };
+        };
+        const customToolExecutor = new CustomToolExecutor(customTools, messageSender);
+        
+        console.log('[QwenProvider] 执行图片理解工具调用');
+        
+        // 执行图片理解工具
+        try {
+          const toolResult = await customToolExecutor.executeTool('understand_image', {
+            image_url: context.imageUrl,
+            question: context.originalQuestion || question
+          });
+          
+          // 通知工具结果
+          this.handlers.onToolResult(toolResult);
+          
+          if (toolResult.status === 'success') {
+            // 将图片分析结果作为AI回答返回
+            const analysisResult = typeof toolResult.content === 'object' 
+              ? toolResult.content.analysis || JSON.stringify(toolResult.content)
+              : toolResult.content;
+            
+            console.log('[QwenProvider] 图片理解完成，返回分析结果');
+            
+            // 添加AI助手的响应到消息历史
+            this.messages.push({
+              role: 'assistant',
+              content: analysisResult
+            });
+            
+            console.log(`[QwenProvider] 图片分析结果已保存到messages历史，当前历史长度: ${this.messages.length}`);
+            console.log(`[QwenProvider] 最新助手消息预览: ${analysisResult.substring(0, 100)}...`);
+            
+            // 逐字输出分析结果
+            for (let i = 0; i < analysisResult.length; i++) {
+              this.handlers.onToken(analysisResult[i]);
+              // 添加小的延迟以模拟打字效果
+              await new Promise(resolve => setTimeout(resolve, 20));
+            }
+            
+            this.handlers.onComplete(analysisResult);
+          } else {
+            // 处理工具执行错误
+            const errorMessage = `图片分析失败: ${toolResult.error || toolResult.message || '未知错误'}`;
+            console.error('[QwenProvider] 图片理解失败:', toolResult);
+            
+            this.messages.push({
+              role: 'assistant',
+              content: errorMessage
+            });
+            
+            console.log(`[QwenProvider] 图片分析错误信息已保存到messages历史，当前历史长度: ${this.messages.length}`);
+            
+            this.handlers.onToken(errorMessage);
+            this.handlers.onComplete(errorMessage);
+          }
+        } catch (error) {
+          console.error('[QwenProvider] 图片理解工具执行异常:', error);
+          const errorMessage = `图片分析过程中出现异常: ${error instanceof Error ? error.message : '未知错误'}`;
+          
+          this.messages.push({
+            role: 'assistant',
+            content: errorMessage
+          });
+          
+          console.log(`[QwenProvider] 图片分析错误信息已保存到messages历史，当前历史长度: ${this.messages.length}`);
+          
+          this.handlers.onToken(errorMessage);
+          this.handlers.onComplete(errorMessage);
+        }
+        
+        return; // 图片处理完成，直接返回
+      }
+      
+      // 普通文本消息处理
       // 添加用户消息到历史记录
       this.messages.push({ role: 'user', content: question });
+      
+      console.log(`[QwenProvider] 普通文本消息已添加到历史，当前历史长度: ${this.messages.length}`);
+      console.log(`[QwenProvider] 当前对话历史摘要:`, 
+        this.messages.slice(-3).map(msg => `${msg.role}: ${msg.content.substring(0, 50)}...`));
       
       await this.prepareMCPMode();
 

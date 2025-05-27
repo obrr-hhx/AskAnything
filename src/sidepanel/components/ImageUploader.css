@@ -1,0 +1,213 @@
+.image-uploader {
+  margin: 8px 0;
+}
+
+.upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  background-color: #fafafa;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+  padding: 16px;
+}
+
+.upload-area:hover:not(.disabled) {
+  border-color: #007acc;
+  background-color: #f0f8ff;
+}
+
+.upload-area.drag-over {
+  border-color: #007acc;
+  background-color: #e6f3ff;
+  transform: scale(1.02);
+}
+
+.upload-area.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  background-color: #f5f5f5;
+}
+
+.upload-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+  opacity: 0.7;
+}
+
+.upload-text {
+  color: #666;
+  font-size: 14px;
+}
+
+.upload-hint {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.image-preview {
+  position: relative;
+  display: inline-block;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 200px;
+  display: block;
+  border-radius: 8px;
+}
+
+.remove-image-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.remove-image-button:hover:not(:disabled) {
+  background-color: rgba(255, 0, 0, 0.8);
+}
+
+.remove-image-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 胶囊按钮样式的图片上传器 */
+.image-upload-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--border-color);
+  color: var(--text-color);
+  border: none;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: 28px;
+  position: relative;
+  min-width: fit-content;
+}
+
+.image-upload-button:hover:not(.disabled) {
+  background-color: var(--hover-color);
+  transform: translateY(-1px);
+}
+
+.image-upload-button.drag-over {
+  background-color: #007acc;
+  color: white;
+  transform: scale(1.02);
+}
+
+.image-upload-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.image-upload-button.has-image {
+  background-color: #e8f5e8;
+  color: #2e7d32;
+  border: 1px solid #4caf50;
+}
+
+.upload-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.remove-image-mini-button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  margin-left: 4px;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.remove-image-mini-button:hover {
+  background-color: rgba(255, 0, 0, 0.2);
+  color: #ff0000;
+}
+
+/* 图片预览弹窗 */
+.image-preview-popup {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin-top: 4px;
+  max-width: 200px;
+}
+
+.image-preview-popup img {
+  max-width: 100%;
+  max-height: 150px;
+  border-radius: 4px;
+  object-fit: contain;
+  display: block;
+}
+
+/* 深色模式支持 */
+@media (prefers-color-scheme: dark) {
+  .image-upload-button {
+    background-color: #303134;
+    color: #e8eaed;
+  }
+  
+  .image-upload-button:hover:not(.disabled) {
+    background-color: #3c4043;
+  }
+  
+  .image-upload-button.has-image {
+    background-color: #2d4a2d;
+    color: #81c784;
+    border-color: #4caf50;
+  }
+  
+  .image-preview-popup {
+    background: #2d333b;
+    border-color: #444c56;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+} 
