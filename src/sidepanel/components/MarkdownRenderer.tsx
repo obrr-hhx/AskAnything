@@ -4,6 +4,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import rehypeRaw from 'rehype-raw';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import './MarkdownRenderer.css';
@@ -43,6 +44,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
           }]
         ]} 
         remarkPlugins={[
+          remarkGfm,
           [remarkMath, { 
             singleDollarTextMath: true 
           }]
@@ -65,6 +67,12 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
               </code>
             );
           },
+          // 自定义表格组件
+          table: ({ node, ...props }) => (
+            <div className="table-container">
+              <table {...props} />
+            </div>
+          ),
           // 自定义span标签的渲染，确保行内公式正确显示
           span: ({ node, className, children, ...props }) => {
             // 为行内公式元素添加特殊处理

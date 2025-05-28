@@ -121,20 +121,48 @@
 .markdown-content table {
   border-collapse: collapse;
   width: 100%;
-  margin-bottom: 16px;
-  display: block;
+  margin: 16px 0;
+  display: table;
   overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--background-color);
 }
 
 .markdown-content table th,
 .markdown-content table td {
-  padding: 6px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--border-color);
+  text-align: left;
+  vertical-align: top;
+  word-wrap: break-word;
 }
 
 .markdown-content table th {
   background-color: rgba(0, 0, 0, 0.03);
   font-weight: 600;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.markdown-content table tbody tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.01);
+}
+
+.markdown-content table tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* 表格容器，确保水平滚动 */
+.markdown-content .table-container {
+  overflow-x: auto;
+  margin: 16px 0;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-content .table-container table {
+  margin: 0;
+  border-radius: 6px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -146,8 +174,21 @@
     color: var(--primary-color);
   }
   
+  .markdown-content table {
+    background-color: var(--background-color);
+    border-color: var(--border-color);
+  }
+  
   .markdown-content table th {
     background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  .markdown-content table tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.02);
+  }
+  
+  .markdown-content table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.04);
   }
 }
 
