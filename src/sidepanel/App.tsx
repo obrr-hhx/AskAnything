@@ -22,11 +22,23 @@ const App: React.FC = () => {
       try {
         await initializeStore();
         
-        // 获取当前页面信息
+        // 通知content-script侧边栏已打开，隐藏浮标
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           const tab = tabs[0];
-          if (tab?.url) {
-            // 将URL和标题发送到store
+          if (tab?.id) {
+            // 同时通知service-worker记录状态
+            chrome.runtime.sendMessage({ 
+              type: 'SIDEPANEL_STATE_UPDATE', 
+              tabId: tab.id, 
+              isOpen: true 
+            });
+            
+            chrome.tabs.sendMessage(tab.id, { type: 'SIDEPANEL_OPENED' })
+              .catch(error => {
+                console.warn('[Sidepanel] 通知content-script隐藏浮标失败:', error);
+              });
+            
+            // 获取当前页面信息
             chrome.runtime.sendMessage({
               type: 'GET_PAGE_INFO',
               tabId: tab.id
@@ -43,6 +55,65 @@ const App: React.FC = () => {
     };
     
     init();
+  }, []);
+
+  // 监听页面卸载，在侧边栏关闭时恢复浮标
+  useEffect(() => {
+    const notifySidepanelClosed = () => {
+      // 通知content-script侧边栏已关闭，恢复浮标
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const tab = tabs[0];
+        if (tab?.id) {
+          // 同时通知service-worker记录状态
+          chrome.runtime.sendMessage({ 
+            type: 'SIDEPANEL_STATE_UPDATE', 
+            tabId: tab.id, 
+            isOpen: false 
+          });
+          
+          chrome.tabs.sendMessage(tab.id, { type: 'SIDEPANEL_CLOSED' })
+            .then(() => {
+              console.log('[Sidepanel] 成功通知content-script恢复浮标');
+            })
+            .catch(error => {
+              console.warn('[Sidepanel] 通知content-script恢复浮标失败:', error);
+            });
+        }
+      });
+    };
+
+    // 监听多种关闭事件
+    const handleBeforeUnload = () => {
+      console.log('[Sidepanel] beforeunload事件触发');
+      notifySidepanelClosed();
+    };
+
+    const handlePageHide = () => {
+      console.log('[Sidepanel] pagehide事件触发');
+      notifySidepanelClosed();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        console.log('[Sidepanel] visibilitychange事件触发 (hidden)');
+        notifySidepanelClosed();
+      }
+    };
+
+    // 添加多种事件监听器
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // 清理事件监听器
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      // 确保在组件卸载时也执行一次关闭通知
+      console.log('[Sidepanel] 组件卸载，执行关闭通知');
+      notifySidepanelClosed();
+    };
   }, []);
 
   // 打开选项页面的函数

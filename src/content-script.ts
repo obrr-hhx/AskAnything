@@ -423,8 +423,27 @@ function init() {
     return;
   }
   
-  createFloatingButton();
-  updateButtonTheme();
+  // 首先查询当前侧边栏状态，再决定是否创建浮标
+  console.log('[ContentScript] 查询当前侧边栏状态...');
+  chrome.runtime.sendMessage({ 
+    type: 'GET_SIDEPANEL_STATE' 
+  }, (response) => {
+    if (response && typeof response.isOpen === 'boolean') {
+      sidepanelOpen = response.isOpen;
+      console.log(`[ContentScript] 获取到侧边栏状态: ${sidepanelOpen ? '开启' : '关闭'}`);
+    } else {
+      // 如果无法获取状态，默认为关闭
+      sidepanelOpen = false;
+      console.log('[ContentScript] 无法获取侧边栏状态，默认为关闭');
+    }
+    
+    // 现在创建浮标
+    createFloatingButton();
+    updateButtonTheme();
+    
+    // 根据侧边栏状态决定浮标显示
+    enforceFloatingButtonRule();
+  });
   
   // 设置DOM观察器来监控变化
   setupDomObserver(); // 直接调用而不存储返回值
@@ -460,6 +479,8 @@ interface MessageCounter {
   GET_SELECTION: number;
   GET_PAGE_INFO: number;
   OPEN_SIDEPANEL: number;
+  SIDEPANEL_OPENED: number;
+  SIDEPANEL_CLOSED: number;
   other: number;
   [key: string]: number; // 添加索引签名，允许任何字符串键
 }
@@ -468,6 +489,8 @@ let messageCounter: MessageCounter = {
   GET_SELECTION: 0,
   GET_PAGE_INFO: 0,
   OPEN_SIDEPANEL: 0,
+  SIDEPANEL_OPENED: 0,
+  SIDEPANEL_CLOSED: 0,
   other: 0
 };
 
@@ -576,4 +599,85 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
     return true;
   }
+  
+  if (message.type === 'SIDEPANEL_OPENED') {
+    console.log('[ContentScript] 收到侧边栏打开通知，设置状态并隐藏浮标');
+    sidepanelOpen = true;
+    hideFloatingButton();
+    // 额外确保规则执行
+    setTimeout(enforceFloatingButtonRule, 100);
+    sendResponse({ success: true });
+    return true;
+  }
+  
+  if (message.type === 'SIDEPANEL_CLOSED') {
+    console.log('[ContentScript] 收到侧边栏关闭通知，设置状态并显示浮标');
+    sidepanelOpen = false;
+    showFloatingButton();
+    // 额外确保规则执行
+    setTimeout(enforceFloatingButtonRule, 100);
+    sendResponse({ success: true });
+    return true;
+  }
+});
+
+// 浮标显示/隐藏控制
+let sidepanelOpen = false; // 跟踪侧边栏状态
+
+function showFloatingButton() {
+  const fab = document.getElementById('ai-sidepanel-fab');
+  if (fab) {
+    if (sidepanelOpen) {
+      console.log('[ContentScript] 侧边栏开启中，拒绝显示浮标');
+      fab.style.display = 'none';
+    } else {
+      fab.style.display = 'flex';
+      console.log('[ContentScript] 浮标已显示');
+    }
+  }
+}
+
+function hideFloatingButton() {
+  const fab = document.getElementById('ai-sidepanel-fab');
+  if (fab) {
+    fab.style.display = 'none';
+    console.log('[ContentScript] 浮标已隐藏');
+  }
+}
+
+// 强制检查并确保浮标状态正确
+function enforceFloatingButtonRule() {
+  const fab = document.getElementById('ai-sidepanel-fab');
+  if (!fab) return;
+  
+  const shouldShow = !sidepanelOpen;
+  const isCurrentlyShowing = fab.style.display !== 'none';
+  
+  if (shouldShow && !isCurrentlyShowing) {
+    console.log('[ContentScript] 强制规则：侧边栏关闭，浮标必须显示');
+    fab.style.display = 'flex';
+  } else if (!shouldShow && isCurrentlyShowing) {
+    console.log('[ContentScript] 强制规则：侧边栏开启，浮标必须隐藏');
+    fab.style.display = 'none';
+  }
+}
+
+// 智能检查浮标状态（仅在必要时）
+function checkFloatingButtonState() {
+  console.log(`[ContentScript] 检查浮标状态 - 侧边栏: ${sidepanelOpen ? '开启' : '关闭'}`);
+  enforceFloatingButtonRule();
+}
+
+// 监听页面可见性变化，当页面重新可见时检查浮标状态
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    console.log('[ContentScript] 页面变为可见，检查浮标状态');
+    setTimeout(checkFloatingButtonState, 500); // 延迟一下确保页面完全加载
+  }
+});
+
+// 监听页面焦点事件
+window.addEventListener('focus', () => {
+  console.log('[ContentScript] 页面获得焦点，检查浮标状态');
+  setTimeout(checkFloatingButtonState, 100);
 });

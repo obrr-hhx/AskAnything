@@ -3,6 +3,61 @@ import { MCPService } from './services/mcp';
 import { StreamService } from './services/stream';
 import { getPendingQuestionsFromStorage, setPendingQuestionsToStorage } from './sidepanel/store';
 
+// 立即执行的初始化代码，但不使用 chrome.action.onClicked - 使用侧边栏
+console.log('[ServiceWorker] 开始初始化...');
+
+// 跟踪已发送恢复消息的标签页，避免重复发送
+let notifiedTabs = new Set<number>();
+
+// 跟踪每个标签页的侧边栏状态
+let sidepanelStates = new Map<number, boolean>(); // tabId -> isOpen
+
+// 强制同步浮标状态
+function enforceFabState(tabId: number, sidepanelOpen: boolean) {
+  const messageType = sidepanelOpen ? 'SIDEPANEL_OPENED' : 'SIDEPANEL_CLOSED';
+  console.log(`[ServiceWorker] 强制同步标签页 ${tabId} 浮标状态: ${sidepanelOpen ? '隐藏' : '显示'}`);
+  
+  chrome.tabs.sendMessage(tabId, { type: messageType })
+    .then(() => {
+      sidepanelStates.set(tabId, sidepanelOpen);
+      console.log(`[ServiceWorker] 标签页 ${tabId} 状态已同步: sidepanel=${sidepanelOpen}`);
+    })
+    .catch(error => {
+      console.log(`[ServiceWorker] 标签页 ${tabId} 状态同步失败:`, error.message || error);
+    });
+}
+
+// 监听标签页更新，确保浮标正确显示
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // 只在页面完全加载且URL有效时处理
+  if (changeInfo.status === 'complete' && tab.url && !tab.url.startsWith('chrome://')) {
+    console.log('[ServiceWorker] 标签页加载完成:', tabId, tab.url);
+    
+    // 清除该标签页的通知记录，允许重新发送
+    notifiedTabs.delete(tabId);
+    
+    // 延迟检查状态，确保content-script已加载
+    setTimeout(() => {
+      if (!notifiedTabs.has(tabId)) {
+        // 检查该标签页是否有侧边栏打开
+        const sidepanelOpen = sidepanelStates.get(tabId) || false;
+        console.log(`[ServiceWorker] 标签页 ${tabId} 当前侧边栏状态: ${sidepanelOpen}`);
+        
+        // 根据侧边栏状态决定浮标显示
+        enforceFabState(tabId, sidepanelOpen);
+        notifiedTabs.add(tabId);
+      }
+    }, 1000);
+  }
+});
+
+// 监听标签页关闭，清理状态
+chrome.tabs.onRemoved.addListener((tabId) => {
+  console.log(`[ServiceWorker] 标签页 ${tabId} 已关闭，清理状态`);
+  sidepanelStates.delete(tabId);
+  notifiedTabs.delete(tabId);
+});
+
 // 当扩展首次安装或更新时触发
 chrome.runtime.onInstalled.addListener(() => {
   console.log('[ServiceWorker] 扩展已安装或更新');
@@ -78,6 +133,10 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
         try {
           chrome.sidePanel.open({ tabId: sender.tab.id }).then(() => {
             console.log('[ServiceWorker] 侧边栏已成功打开');
+            // 更新状态跟踪并强制隐藏浮标
+            if (sender.tab?.id) {
+              enforceFabState(sender.tab.id, true);
+            }
             sendResponse({ success: true });
           }).catch((error: any) => {
             console.error('[ServiceWorker] 打开侧边栏失败:', error);
@@ -111,9 +170,25 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
         tabId: message.tabId || null // 传递tabId以便侧边栏知道这是哪个标签页的关闭请求
       }).then(response => {
         console.log('[ServiceWorker] 侧边栏关闭请求已发送:', response);
+        
+        // 获取当前标签页ID并更新状态
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]?.id) {
+            enforceFabState(tabs[0].id, false);
+          }
+        });
+        
         sendResponse({ success: true, closed: true });
       }).catch(error => {
         console.log('[ServiceWorker] 没有侧边栏接收关闭消息:', error);
+        
+        // 即使没有侧边栏响应，也要确保浮标显示
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]?.id) {
+            enforceFabState(tabs[0].id, false);
+          }
+        });
+        
         sendResponse({ success: false, notOpen: true, error: String(error) });
       });
       
@@ -373,6 +448,35 @@ ${message.noteContent}
       }
       
       return true; // 保持sendResponse的有效性
+    }
+
+    if (messageType === 'SIDEPANEL_STATE_UPDATE') {
+      console.log(`[ServiceWorker] 收到侧边栏状态更新: 标签页${message.tabId}, 状态=${message.isOpen ? '开启' : '关闭'}`);
+      if (message.tabId) {
+        sidepanelStates.set(message.tabId, message.isOpen);
+        console.log(`[ServiceWorker] 已更新标签页 ${message.tabId} 侧边栏状态: ${message.isOpen}`);
+      }
+      sendResponse({ success: true });
+      return true;
+    }
+
+    if (messageType === 'GET_SIDEPANEL_STATE') {
+      console.log(`[ServiceWorker] 收到侧边栏状态查询请求`);
+      
+      // 获取当前活动标签页ID
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          const tabId = tabs[0].id;
+          const isOpen = sidepanelStates.get(tabId) || false;
+          console.log(`[ServiceWorker] 标签页 ${tabId} 侧边栏状态: ${isOpen}`);
+          sendResponse({ success: true, isOpen, tabId });
+        } else {
+          console.log('[ServiceWorker] 无法获取当前标签页ID');
+          sendResponse({ success: false, error: '无法获取当前标签页ID' });
+        }
+      });
+      
+      return true; // 保持sendResponse有效
     }
 
     // 如果没有匹配的消息类型，默认响应
