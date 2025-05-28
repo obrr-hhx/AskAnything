@@ -15,6 +15,9 @@
     "https://api.openai.com/",
     "https://api.anthropic.com/",
     "https://dashscope.aliyuncs.com/",
+    "https://api.bilibili.com/",
+    "https://www.bilibili.com/",
+    "https://b23.tv/",
     "file://*/*"
   ],
   "icons": {

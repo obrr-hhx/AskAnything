@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { ChatCompletionTool } from 'openai/resources/chat/completions';
+import { BilibiliVideoService } from '../services/bilibili-video';
 
 /**
  * 工具调用类型定义
@@ -125,8 +126,37 @@ export const imageUnderstandingTool: ChatCompletionTool = {
     },
 };
 
+// 视频理解工具
+export const videoUnderstandingTool: ChatCompletionTool = {
+    type: "function",
+    function: {
+        name: "understand_video",
+        description: "分析和理解B站视频内容，提供详细的总结和时间戳导航",
+        parameters: {
+            type: "object",
+            properties: {
+                video_url: {
+                    type: "string",
+                    description: "B站视频URL"
+                },
+                analysis_type: {
+                    type: "string",
+                    enum: ["summary", "chapters", "highlights", "full"],
+                    description: "分析类型：summary(摘要)、chapters(章节)、highlights(亮点)、full(完整分析)",
+                    default: "summary"
+                },
+                focus_keywords: {
+                    type: "string",
+                    description: "用户关注的关键词，用于重点分析相关内容"
+                }
+            },
+            required: ["video_url"]
+        },
+    },
+};
+
 // 所有自定义工具列表
-export const customTools = [taskCompletionTool, askQuestionTool, webSearchTool, imageUnderstandingTool];
+export const customTools = [taskCompletionTool, askQuestionTool, webSearchTool, imageUnderstandingTool, videoUnderstandingTool];
 
 // 生成唯一用户ID
 const user_id = uuidv4();
@@ -359,6 +389,164 @@ export async function understandImage(toolArg: any): Promise<ToolResponse> {
     }
 }
 
+// 视频理解工具实现
+export async function understandVideo(toolArg: any): Promise<ToolResponse> {
+    try {
+        console.log("[视频理解工具] 开始分析视频");
+        
+        // 获取API密钥 - 使用通义千问进行分析
+        const data = await chrome.storage.local.get(['apiKeys']);
+        const apiKeys = data.apiKeys || {};
+        const api_key = apiKeys['qwen3'] || '';
+        
+        if (!api_key) {
+            return {
+                status: 'error',
+                content: null,
+                error: "未设置通义千问API密钥",
+                message: "请在选项页面设置通义千问API密钥以使用视频理解功能"
+            };
+        }
+
+        const video_url = toolArg.video_url;
+        const analysis_type = toolArg.analysis_type || 'summary';
+        const focus_keywords = toolArg.focus_keywords;
+
+        if (!video_url) {
+            return {
+                status: 'error',
+                content: null,
+                error: "缺少视频URL",
+                message: "请提供要分析的B站视频链接"
+            };
+        }
+
+        // 检查是否为B站视频
+        if (!video_url.includes('bilibili.com') && !video_url.includes('b23.tv')) {
+            return {
+                status: 'error',
+                content: null,
+                error: "不支持的视频平台",
+                message: "目前只支持B站视频分析"
+            };
+        }
+
+        // 提取视频ID
+        const videoId = BilibiliVideoService.extractVideoId(video_url);
+        if (!videoId) {
+            return {
+                status: 'error',
+                content: null,
+                error: "无法解析视频ID",
+                message: "请检查B站视频链接格式是否正确"
+            };
+        }
+
+        // 获取视频信息
+        const videoInfo = await BilibiliVideoService.getVideoInfo(videoId);
+        if (!videoInfo) {
+            return {
+                status: 'error',
+                content: null,
+                error: "无法获取视频信息",
+                message: "视频可能不存在或无法访问"
+            };
+        }
+
+        // 获取字幕（使用第一个分P的cid）
+        const cid = videoInfo.pages[0]?.cid;
+        let subtitles: any[] = [];
+        
+        if (cid) {
+            subtitles = await BilibiliVideoService.getSubtitles(cid);
+        }
+
+        // 构建分析提示词
+        const analysisPrompt = await BilibiliVideoService.analyzeVideoContent(
+            videoInfo, 
+            subtitles, 
+            analysis_type, 
+            focus_keywords
+        );
+
+        // 调用通义千问API进行分析
+        const response = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${api_key}`
+            },
+            body: JSON.stringify({
+                model: "qwen-plus",
+                messages: [
+                    {
+                        role: "system",
+                        content: "你是一个专业的视频内容分析师，擅长分析B站视频内容并提供结构化的总结。请根据用户要求分析视频内容，并提供清晰的时间戳和跳转链接。"
+                    },
+                    {
+                        role: "user",
+                        content: analysisPrompt
+                    }
+                ],
+                temperature: 0.7,
+                max_tokens: 2000
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("[视频理解工具] API请求失败:", errorText);
+            return {
+                status: 'error',
+                content: null,
+                error: `通义千问API请求失败: ${response.status} ${response.statusText}`,
+                message: errorText
+            };
+        }
+
+        const result = await response.json();
+        console.log("[视频理解工具] API响应:", result);
+
+        if (result.choices && result.choices[0]) {
+            const analysis = result.choices[0].message.content;
+            
+            // 构建结果对象
+            const analysisResult = {
+                title: videoInfo.title,
+                duration: BilibiliVideoService.formatTime(videoInfo.duration),
+                uploader: videoInfo.owner.name,
+                analysis: analysis,
+                video_url: video_url,
+                analysis_type: analysis_type,
+                has_subtitles: subtitles.length > 0,
+                subtitle_count: subtitles.length
+            };
+
+            return {
+                status: 'success',
+                content: analysisResult,
+                message: "视频分析完成"
+            };
+        } else {
+            return {
+                status: 'error',
+                content: null,
+                error: "API返回格式异常",
+                message: "无法解析视频分析结果"
+            };
+        }
+
+    } catch (error) {
+        console.error("[视频理解工具] 执行失败:", error);
+        return {
+            status: 'error',
+            content: null,
+            error: error instanceof Error ? error.message : String(error),
+            message: "视频分析过程中发生错误"
+        };
+    }
+}
+
 // 自定义工具执行器类
 export class CustomToolExecutor {
     private tools: ChatCompletionTool[];
@@ -374,7 +562,8 @@ export class CustomToolExecutor {
             "web_search": webSearch,
             "ask_question": (args: any) => askQuestion(args, this.messageSender),
             "task_complete": taskComplete,
-            "understand_image": understandImage
+            "understand_image": understandImage,
+            "understand_video": understandVideo
         };
     }
 

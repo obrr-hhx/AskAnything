@@ -486,7 +486,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0;
+  flex-shrink: 0;
+  min-width: fit-content;
 }
 
 .pill-toggle {
@@ -696,11 +697,35 @@ input:checked + .pill-toggle-slider:before {
 .chat-controls {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px;
   margin-top: 8px;
   position: relative;
+  flex-wrap: wrap;
+  min-height: 36px;
+}
+
+/* 在窄屏幕下调整布局 */
+@media (max-width: 400px) {
+  .chat-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  
+  .thinking-toggle-container {
+    order: 1;
+  }
+  
+  .media-analyzer {
+    order: 2;
+  }
+  
+  .mcp-tools-button {
+    order: 3;
+    align-self: flex-start;
+  }
 }
 
 /* 新对话按钮样式 */
@@ -737,6 +762,12 @@ input:checked + .pill-toggle-slider:before {
 }
 
 /* MCP工具按钮样式调整 */
+.mcp-tools-button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* MCP工具按钮优化 */
 .mcp-tools-button {
   display: flex;
   align-items: center;

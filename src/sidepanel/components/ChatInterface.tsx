@@ -4,7 +4,7 @@ import { ChatMessage } from '../../shared/models';
 import MarkdownRenderer from './MarkdownRenderer';
 import HistoryList from './HistoryList';
 import MCPToolsViewer from './MCPToolsViewer';
-import ImageUploader from './ImageUploader';
+import MediaAnalyzer from './MediaAnalyzer';
 import './ChatInterface.css';
 import { debounce } from 'lodash';
 
@@ -412,6 +412,37 @@ const ChatInterface: React.FC = () => {
     console.log('[ChatInterface] 图片已移除');
   };
 
+  // 处理视频分析
+  const handleVideoAnalyze = async (videoUrl: string, analysisType?: string, focusKeywords?: string) => {
+    if (isLoading) return;
+    
+    console.log('[ChatInterface] 开始视频分析:', { videoUrl, analysisType, focusKeywords });
+    
+    // 构建视频分析消息
+    const videoMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: `请分析这个B站视频：${videoUrl}`,
+      timestamp: Date.now(),
+      context: currentContext || undefined
+    };
+    
+    // 添加用户消息到界面
+    useChatStore.getState().addMessage(videoMessage);
+    
+    // 构建视频分析问题，包含工具调用指令
+    const videoAnalysisQuestion = `我想分析这个B站视频的内容，请使用视频理解工具进行分析。视频链接：${videoUrl}${analysisType ? `，分析类型：${analysisType}` : ''}${focusKeywords ? `，关注关键词：${focusKeywords}` : ''}`;
+    
+    // 发送分析请求
+    setTimeout(() => {
+      try {
+        sendQuestion(videoAnalysisQuestion);
+      } catch(error) {
+        console.error('[ChatInterface] 发送视频分析问题失败:', error);
+      }
+    }, 10);
+  };
+
   // 处理发送消息
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -802,7 +833,15 @@ const ChatInterface: React.FC = () => {
       )}
       
       <form className="input-container" onSubmit={handleSendMessage}>
+        <MediaAnalyzer
+          onImageSelect={handleImageSelect}
+          onImageRemove={handleImageRemove}
+          onVideoAnalyze={handleVideoAnalyze}
+          selectedImage={selectedImage}
+          disabled={isLoading}
+        />
         <textarea
+          ref={textareaRef}
           value={userInput}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
@@ -818,14 +857,13 @@ const ChatInterface: React.FC = () => {
           }
           // 如果最后一条消息是AI提问，即使isLoading也不禁用输入框
           disabled={isLoading && !(messages.length > 0 && messages[messages.length - 1].isAIQuestion)}
-          ref={textareaRef}
           rows={1}
         />
         
         {isLoading && !(messages.length > 0 && messages[messages.length - 1].isAIQuestion) ? (
           <button 
             type="button" 
-            className="stop-generate-button" 
+            className="stop-generate-button"
             onClick={handleStopGeneration}
             title="停止AI生成 (按ESC)"
           >
@@ -875,15 +913,7 @@ const ChatInterface: React.FC = () => {
               </label>
               <span className="pill-toggle-label">思考模式</span>
             </div>
-
-            {/* 图片上传按钮 */}
-            <ImageUploader
-              onImageSelect={handleImageSelect}
-              onRemove={handleImageRemove}
-              selectedImage={selectedImage}
-              disabled={isLoading}
-            />
-
+            
             <button 
               className="mcp-tools-button"
               onClick={handleShowMCPTools}
