@@ -466,7 +466,8 @@ export async function understandVideo(toolArg: any): Promise<ToolResponse> {
             videoInfo, 
             subtitles, 
             analysis_type, 
-            focus_keywords
+            focus_keywords,
+            video_url  // 传递原始URL
         );
 
         // 调用通义千问API进行分析

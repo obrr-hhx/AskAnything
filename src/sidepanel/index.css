@@ -974,4 +974,234 @@ button.remove-image-button:hover:not(:disabled),
     border-color: var(--border-color);
     color: var(--text-color);
   }
+}
+
+/* 视频封面预览样式 */
+.video-preview {
+  margin: 10px 0;
+}
+
+@media (max-width: 400px) {
+  .video-preview {
+    margin: 8px 0;
+  }
+}
+
+.video-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--hover-color);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--text-color);
+}
+
+@media (max-width: 400px) {
+  .video-loading {
+    padding: 10px;
+    font-size: 10px;
+    gap: 6px;
+  }
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.video-thumbnail-preview {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: var(--hover-color);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+@media (max-width: 400px) {
+  .video-thumbnail-preview {
+    gap: 8px;
+    padding: 8px;
+  }
+}
+
+.video-thumbnail {
+  width: 80px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 400px) {
+  .video-thumbnail {
+    width: 60px;
+    height: 45px;
+  }
+}
+
+.video-thumbnail-error {
+  width: 80px;
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--border-color);
+  border-radius: 6px;
+  font-size: 10px;
+  color: var(--text-color);
+  opacity: 0.7;
+  text-align: center;
+  line-height: 1.2;
+}
+
+@media (max-width: 400px) {
+  .video-thumbnail-error {
+    width: 60px;
+    height: 45px;
+    font-size: 9px;
+  }
+}
+
+.video-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.video-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-color);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 400px) {
+  .video-title {
+    font-size: 10px;
+    -webkit-line-clamp: 2;
+  }
+}
+
+.video-bvid {
+  font-size: 10px;
+  color: var(--text-color);
+  opacity: 0.7;
+  font-family: monospace;
+}
+
+@media (max-width: 400px) {
+  .video-bvid {
+    font-size: 9px;
+  }
+}
+
+.remove-video-button {
+  position: absolute !important;
+  top: -3px !important;
+  right: -3px !important;
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 12px !important;
+  min-height: 12px !important;
+  max-width: 12px !important;
+  max-height: 12px !important;
+  border-radius: 0px !important;
+  border: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  color: #999 !important;
+  font-size: 10px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.2s ease !important;
+  font-weight: bold !important;
+  line-height: 1 !important;
+  font-family: Arial, sans-serif !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.remove-video-button:hover:not(:disabled) {
+  background: #ff4444 !important;
+  color: white !important;
+}
+
+.video-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--text-color);
+}
+
+@media (max-width: 400px) {
+  .video-error {
+    padding: 8px;
+    font-size: 10px;
+    gap: 6px;
+  }
+}
+
+.error-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 400px) {
+  .error-icon {
+    font-size: 12px;
+  }
+}
+
+/* 暗黑模式适配 */
+@media (prefers-color-scheme: dark) {
+  .video-loading,
+  .video-thumbnail-preview {
+    background: var(--note-background);
+    border-color: var(--border-color);
+  }
+  
+  .video-thumbnail-error {
+    background: #404040;
+  }
+  
+  .video-error {
+    background: rgba(255, 68, 68, 0.15);
+    border-color: rgba(255, 68, 68, 0.4);
+  }
+  
+  .remove-video-button {
+    color: #aaa !important;
+  }
+  
+  .remove-video-button:hover:not(:disabled) {
+    background: #ff4444 !important;
+    color: white !important;
+  }
 } 

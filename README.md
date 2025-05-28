@@ -4,7 +4,7 @@ AskAnything 是一个AI侧边浮标浏览器插件，旨在提供智能化的辅
 
 <p align="center"><img src="./images/AskAnything_icon.jpg" width="200"/></p>
 
-一款Chrome浏览器扩展，提供即时AI问答功能、多模态图片理解和本地Markdown笔记浏览编辑功能，支持多种大语言模型。 **要使用AI功能，你需要自行在扩展的选项页面中配置相应的API密钥。**
+一款Chrome浏览器扩展，提供即时AI问答功能、多媒体理解和本地Markdown笔记浏览编辑功能，支持多种大语言模型。 **要使用AI功能，你需要自行在扩展的选项页面中配置相应的API密钥。**
 
 ## 功能特点
 

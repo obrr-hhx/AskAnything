@@ -418,13 +418,30 @@ const ChatInterface: React.FC = () => {
     
     console.log('[ChatInterface] 开始视频分析:', { videoUrl, analysisType, focusKeywords });
     
+    // 获取视频封面信息
+    let videoThumbnail = null;
+    try {
+      // 动态导入BilibiliVideoService
+      const { BilibiliVideoService } = await import('../../services/bilibili-video');
+      const videoId = BilibiliVideoService.extractVideoId(videoUrl);
+      if (videoId) {
+        videoThumbnail = await BilibiliVideoService.getVideoThumbnail(videoId);
+        console.log('[ChatInterface] 获取到视频封面:', videoThumbnail);
+      }
+    } catch (error) {
+      console.error('[ChatInterface] 获取视频封面失败:', error);
+    }
+    
     // 构建视频分析消息
     const videoMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
       content: `请分析这个B站视频：${videoUrl}`,
       timestamp: Date.now(),
-      context: currentContext || undefined
+      context: currentContext || undefined,
+      hasVideo: true,
+      videoUrl: videoUrl,
+      videoThumbnail: videoThumbnail || undefined
     };
     
     // 添加用户消息到界面
@@ -544,12 +561,50 @@ const ChatInterface: React.FC = () => {
     }
     
     // 普通文本消息处理
+    // 检查是否包含B站视频链接
+    let videoThumbnail = null;
+    let hasVideo = false;
+    let videoUrl = '';
+    
+    // 检测消息中是否包含B站视频链接
+    const bilibiliUrlPattern = /(https?:\/\/)?(www\.)?(bilibili\.com\/video\/(BV[a-zA-Z0-9]{10}|av\d+)|b23\.tv\/[a-zA-Z0-9]+)/;
+    const videoUrlMatch = messageContent.match(bilibiliUrlPattern);
+    
+    if (videoUrlMatch) {
+      // 提取完整的URL
+      const fullUrlMatch = messageContent.match(/(https?:\/\/)?(www\.)?bilibili\.com\/video\/(BV[a-zA-Z0-9]{10}|av\d+)(\?[^\s]*)?/);
+      if (fullUrlMatch) {
+        videoUrl = fullUrlMatch[0].startsWith('http') ? fullUrlMatch[0] : `https://${fullUrlMatch[0]}`;
+        // 移除时间参数，只保留基本的视频URL
+        videoUrl = videoUrl.replace(/[?&]t=\d+/, '').replace(/[?&]p=\d+/, '');
+      } else {
+        videoUrl = videoUrlMatch[0].startsWith('http') ? videoUrlMatch[0] : `https://${videoUrlMatch[0]}`;
+      }
+      
+      hasVideo = true;
+      
+      // 获取视频封面信息
+      try {
+        const { BilibiliVideoService } = await import('../../services/bilibili-video');
+        const videoId = BilibiliVideoService.extractVideoId(videoUrl);
+        if (videoId) {
+          videoThumbnail = await BilibiliVideoService.getVideoThumbnail(videoId);
+          console.log('[ChatInterface] 检测到视频链接，获取到封面:', videoThumbnail);
+        }
+      } catch (error) {
+        console.error('[ChatInterface] 获取视频封面失败:', error);
+      }
+    }
+    
     const textMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
       content: messageContent,
       timestamp: Date.now(),
-      context: currentContext || undefined
+      context: currentContext || undefined,
+      hasVideo: hasVideo,
+      videoUrl: hasVideo ? videoUrl : undefined,
+      videoThumbnail: videoThumbnail || undefined
     };
     
     // 添加用户消息
@@ -722,11 +777,45 @@ const ChatInterface: React.FC = () => {
                   <MarkdownRenderer content={message.content} />
                 )
               ) : (
-                // 用户消息，支持图片显示
+                // 用户消息，支持图片和视频显示
                 <>
                   {message.hasImage && message.imageUrl && (
                     <div className="message-image">
                       <img src={message.imageUrl} alt="用户上传的图片" />
+                    </div>
+                  )}
+                  {message.hasVideo && message.videoThumbnail && (
+                    <div className="message-video">
+                      <div className="video-thumbnail-preview">
+                        <img 
+                          src={message.videoThumbnail.pic} 
+                          alt={message.videoThumbnail.title}
+                          className="video-thumbnail"
+                          onError={(e) => {
+                            // 如果封面加载失败，显示默认图标
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            const parent = (e.target as HTMLImageElement).parentElement;
+                            if (parent) {
+                              parent.innerHTML = '<div class="video-thumbnail-error">🎬<br>封面加载失败</div>';
+                            }
+                          }}
+                        />
+                        <div className="video-info">
+                          <div className="video-title" title={message.videoThumbnail.title}>
+                            {message.videoThumbnail.title}
+                          </div>
+                          <div className="video-bvid">
+                            {message.videoThumbnail.bvid}
+                          </div>
+                          {message.videoUrl && (
+                            <div className="video-url">
+                              <a href={message.videoUrl} target="_blank" rel="noopener noreferrer">
+                                🔗 查看视频
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                   <div className="message-text">{message.content}</div>

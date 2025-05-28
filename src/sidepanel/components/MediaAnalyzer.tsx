@@ -1,4 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { BilibiliVideoService } from '../../services/bilibili-video';
 
 interface MediaAnalyzerProps {
   onImageSelect: (file: File, dataUrl: string) => void;
@@ -22,6 +23,8 @@ const MediaAnalyzer: React.FC<MediaAnalyzerProps> = ({
   const [focusKeywords, setFocusKeywords] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropSuccessMessage, setDropSuccessMessage] = useState<string>('');
+  const [videoThumbnail, setVideoThumbnail] = useState<{ title: string; pic: string; bvid: string } | null>(null);
+  const [isLoadingThumbnail, setIsLoadingThumbnail] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -30,6 +33,39 @@ const MediaAnalyzer: React.FC<MediaAnalyzerProps> = ({
   const isValidBilibiliUrl = (url: string): boolean => {
     return url.includes('bilibili.com') || url.includes('b23.tv');
   };
+
+  // 获取视频封面
+  const fetchVideoThumbnail = useCallback(async (url: string) => {
+    if (!url || !isValidBilibiliUrl(url)) {
+      setVideoThumbnail(null);
+      return;
+    }
+
+    setIsLoadingThumbnail(true);
+    try {
+      const videoId = BilibiliVideoService.extractVideoId(url);
+      if (videoId) {
+        const thumbnail = await BilibiliVideoService.getVideoThumbnail(videoId);
+        setVideoThumbnail(thumbnail);
+      } else {
+        setVideoThumbnail(null);
+      }
+    } catch (error) {
+      console.error('获取视频封面失败:', error);
+      setVideoThumbnail(null);
+    } finally {
+      setIsLoadingThumbnail(false);
+    }
+  }, []);
+
+  // 当视频URL变化时，获取封面
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchVideoThumbnail(videoUrl);
+    }, 500); // 防抖，避免频繁请求
+
+    return () => clearTimeout(timeoutId);
+  }, [videoUrl, fetchVideoThumbnail]);
 
   // 处理文件选择
   const handleFileSelect = useCallback((file: File) => {
@@ -216,6 +252,7 @@ const MediaAnalyzer: React.FC<MediaAnalyzerProps> = ({
       setVideoUrl('');
       setFocusKeywords('');
       setAnalysisType('summary');
+      setVideoThumbnail(null); // 清空视频封面
     }
   };
 
@@ -351,6 +388,61 @@ const MediaAnalyzer: React.FC<MediaAnalyzerProps> = ({
                   ✕
                 </button>
               </div>
+
+              {/* 视频封面预览 */}
+              {videoUrl && (
+                <div className="video-preview">
+                  {isLoadingThumbnail ? (
+                    <div className="video-loading">
+                      <div className="loading-spinner">⏳</div>
+                      <span>正在获取视频信息...</span>
+                    </div>
+                  ) : videoThumbnail ? (
+                    <div className="video-thumbnail-preview">
+                      <img 
+                        src={videoThumbnail.pic} 
+                        alt={videoThumbnail.title}
+                        className="video-thumbnail"
+                        onError={(e) => {
+                          // 如果封面加载失败，显示默认图标
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          const parent = (e.target as HTMLImageElement).parentElement;
+                          if (parent) {
+                            parent.innerHTML = '<div class="video-thumbnail-error">🎬<br>封面加载失败</div>';
+                          }
+                        }}
+                      />
+                      <div className="video-info">
+                        <div className="video-title" title={videoThumbnail.title}>
+                          {videoThumbnail.title}
+                        </div>
+                        <div className="video-bvid">
+                          {videoThumbnail.bvid}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClear}
+                        className="remove-video-button"
+                        title="移除视频"
+                        disabled={disabled}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : videoUrl.trim() && isValidBilibiliUrl(videoUrl) ? (
+                    <div className="video-error">
+                      <div className="error-icon">⚠️</div>
+                      <span>无法获取视频信息，请检查链接是否正确</span>
+                    </div>
+                  ) : videoUrl.trim() ? (
+                    <div className="video-error">
+                      <div className="error-icon">❌</div>
+                      <span>请输入有效的B站视频链接</span>
+                    </div>
+                  ) : null}
+                </div>
+              )}
 
               <div className="analysis-options">
                 <div className="option-group">

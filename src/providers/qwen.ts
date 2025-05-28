@@ -151,6 +151,106 @@ export class QwenProvider extends BaseProvider {
         return; // 图片处理完成，直接返回
       }
       
+      // 检查是否包含B站视频链接，如果有则自动调用视频理解工具
+      const bilibiliUrlPattern = /(https?:\/\/)?(www\.)?(bilibili\.com\/video\/(BV[a-zA-Z0-9]{10}|av\d+)|b23\.tv\/[a-zA-Z0-9]+)/;
+      const videoUrlMatch = question.match(bilibiliUrlPattern);
+      
+      if (videoUrlMatch) {
+        // 提取完整的URL，包括可能的参数
+        const fullUrlMatch = question.match(/(https?:\/\/)?(www\.)?bilibili\.com\/video\/(BV[a-zA-Z0-9]{10}|av\d+)(\?[^\s]*)?/);
+        let videoUrl;
+        
+        if (fullUrlMatch) {
+          videoUrl = fullUrlMatch[0].startsWith('http') ? fullUrlMatch[0] : `https://${fullUrlMatch[0]}`;
+          // 移除时间参数，只保留基本的视频URL
+          videoUrl = videoUrl.replace(/[?&]t=\d+/, '').replace(/[?&]p=\d+/, '');
+        } else {
+          videoUrl = videoUrlMatch[0].startsWith('http') ? videoUrlMatch[0] : `https://${videoUrlMatch[0]}`;
+        }
+        
+        console.log('[QwenProvider] 检测到B站视频链接，自动调用视频理解工具:', videoUrl);
+        
+        // 添加用户消息到历史记录
+        this.messages.push({ role: 'user', content: question });
+        
+        // 创建自定义工具执行器
+        const messageSender = async (content: string) => {
+          this.handlers.onToken(content);
+          return { success: true };
+        };
+        const customToolExecutor = new CustomToolExecutor(customTools, messageSender);
+        
+        console.log('[QwenProvider] 执行视频理解工具调用');
+        
+        // 执行视频理解工具，使用默认参数，让AI自己理解用户问题
+        try {
+          const toolResult = await customToolExecutor.executeTool('understand_video', {
+            video_url: videoUrl,
+            analysis_type: 'summary', // 使用默认类型
+            focus_keywords: undefined // 不预设关键词
+          });
+          
+          // 通知工具结果
+          this.handlers.onToolResult(toolResult);
+          
+          if (toolResult.status === 'success') {
+            // 将视频分析结果作为AI回答返回
+            const analysisResult = typeof toolResult.content === 'object' 
+              ? toolResult.content.analysis || JSON.stringify(toolResult.content)
+              : toolResult.content;
+            
+            console.log('[QwenProvider] 视频理解完成，返回分析结果');
+            
+            // 添加AI助手的响应到消息历史
+            this.messages.push({
+              role: 'assistant',
+              content: analysisResult
+            });
+            
+            console.log(`[QwenProvider] 视频分析结果已保存到messages历史，当前历史长度: ${this.messages.length}`);
+            console.log(`[QwenProvider] 最新助手消息预览: ${analysisResult.substring(0, 100)}...`);
+            
+            // 逐字输出分析结果
+            for (let i = 0; i < analysisResult.length; i++) {
+              this.handlers.onToken(analysisResult[i]);
+              // 添加小的延迟以模拟打字效果
+              await new Promise(resolve => setTimeout(resolve, 20));
+            }
+            
+            this.handlers.onComplete(analysisResult);
+          } else {
+            // 处理工具执行错误
+            const errorMessage = `视频分析失败: ${toolResult.error || toolResult.message || '未知错误'}`;
+            console.error('[QwenProvider] 视频理解失败:', toolResult);
+            
+            this.messages.push({
+              role: 'assistant',
+              content: errorMessage
+            });
+            
+            console.log(`[QwenProvider] 视频分析错误信息已保存到messages历史，当前历史长度: ${this.messages.length}`);
+            
+            this.handlers.onToken(errorMessage);
+            this.handlers.onComplete(errorMessage);
+          }
+        } catch (error) {
+          console.error('[QwenProvider] 视频理解工具执行异常:', error);
+          const errorMessage = `视频分析过程中出现异常: ${error instanceof Error ? error.message : '未知错误'}`;
+          
+          this.messages.push({
+            role: 'assistant',
+            content: errorMessage
+          });
+          
+          console.log(`[QwenProvider] 视频分析错误信息已保存到messages历史，当前历史长度: ${this.messages.length}`);
+          
+          this.handlers.onToken(errorMessage);
+          this.handlers.onComplete(errorMessage);
+        }
+        
+        return; // 视频处理完成，直接返回
+      }
+      
       // 普通文本消息处理
       // 添加用户消息到历史记录
       this.messages.push({ role: 'user', content: question });

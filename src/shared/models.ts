@@ -62,6 +62,15 @@ export interface ChatMessage {
   hasImage?: boolean;
   imageUrl?: string;
   imageFile?: File;
+  
+  // 视频相关字段
+  hasVideo?: boolean;
+  videoUrl?: string;
+  videoThumbnail?: {
+    title: string;
+    pic: string;
+    bvid: string;
+  };
 }
 
 // 聊天历史
