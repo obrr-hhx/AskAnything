@@ -68,6 +68,36 @@ npm run build
 
 构建的扩展将位于`dist`目录中。
 
+### 打包发布
+
+为发布创建优化的zip包：
+
+```bash
+npm run package
+```
+
+这将会：
+1. 执行完整构建
+2. 清理不必要的文件（如source maps）
+3. 创建 `askanything.zip` 文件，可直接用于发布
+
+## 安装方式
+
+### 方式一：从 GitHub Releases 下载（推荐）
+
+1. 访问本项目的 [GitHub Releases 页面](https://github.com/obrr-hhx/askanything/releases)
+2. 下载最新版本的 `askanything.zip` 文件
+3. 解压下载的 zip 文件到任意目录
+4. 打开Chrome浏览器，导航至 `chrome://extensions`
+5. 启用页面右上角的"开发者模式"开关
+6. 点击左上角的"加载已解压的扩展程序"按钮
+7. 选择刚才解压的文件夹
+8. **重要**: 扩展加载后，请务必**配置API密钥** (参见上面的"API密钥配置"部分)
+
+### 方式二：本地构建安装
+
+如果你想从源码构建或进行开发，可以按照以下步骤：
+
 ## 本地测试 (加载已解压的扩展)
 
 1.  运行 `npm run build` 生成 `dist` 目录。

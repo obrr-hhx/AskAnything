@@ -55,3 +55,6 @@ out/
 .eslintcache 
 
 development_plan/
+
+# Release packages
+*.zip

@@ -4,8 +4,10 @@
   "description": "AI侧边浮标浏览器插件",
   "main": "index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite build --watch",
     "build": "tsc && vite build",
+    "package": "./scripts/package.sh",
+    "verify": "./scripts/verify-package.sh",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test:deepseek": "node test-deepseek.js",
