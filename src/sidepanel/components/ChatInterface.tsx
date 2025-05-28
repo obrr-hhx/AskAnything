@@ -952,7 +952,7 @@ const ChatInterface: React.FC = () => {
         {isLoading && !(messages.length > 0 && messages[messages.length - 1].isAIQuestion) ? (
           <button 
             type="button" 
-            className="stop-generate-button"
+            className="stop-generate-button" 
             onClick={handleStopGeneration}
             title="停止AI生成 (按ESC)"
           >
@@ -1002,7 +1002,7 @@ const ChatInterface: React.FC = () => {
               </label>
               <span className="pill-toggle-label">思考模式</span>
             </div>
-            
+
             <button 
               className="mcp-tools-button"
               onClick={handleShowMCPTools}

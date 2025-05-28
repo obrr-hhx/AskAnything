@@ -170,9 +170,6 @@ export class QwenProvider extends BaseProvider {
         
         console.log('[QwenProvider] 检测到B站视频链接，自动调用视频理解工具:', videoUrl);
         
-        // 添加用户消息到历史记录
-        this.messages.push({ role: 'user', content: question });
-        
         // 创建自定义工具执行器
         const messageSender = async (content: string) => {
           this.handlers.onToken(content);
@@ -194,6 +191,41 @@ export class QwenProvider extends BaseProvider {
           this.handlers.onToolResult(toolResult);
           
           if (toolResult.status === 'success') {
+            // 获取视频信息和字幕
+            const videoData = toolResult.content;
+            const subtitles = videoData.subtitles || [];
+            
+            // 构建包含字幕的用户消息内容
+            let userMessageContent = `视频链接: ${videoUrl}\n用户问题: ${question}\n\n`;
+            
+            if (subtitles.length > 0) {
+              userMessageContent += `视频字幕:\n`;
+              userMessageContent += `视频标题: ${videoData.title}\n`;
+              userMessageContent += `视频时长: ${videoData.duration}\n`;
+              userMessageContent += `UP主: ${videoData.uploader}\n\n`;
+              userMessageContent += `字幕内容:\n`;
+              
+              // 格式化字幕信息
+              subtitles.forEach((subtitle: any) => {
+                const startTime = this.formatTime(subtitle.startTime);
+                const endTime = this.formatTime(subtitle.endTime);
+                userMessageContent += `[${startTime}-${endTime}] ${subtitle.text}\n`;
+              });
+            } else {
+              userMessageContent += `视频信息:\n`;
+              userMessageContent += `标题: ${videoData.title}\n`;
+              userMessageContent += `时长: ${videoData.duration}\n`;
+              userMessageContent += `UP主: ${videoData.uploader}\n`;
+              userMessageContent += `描述: ${videoData.video_info?.desc || '无描述'}\n`;
+              userMessageContent += `注意: 该视频没有字幕信息\n`;
+            }
+            
+            // 将包含字幕的用户消息添加到历史记录
+            this.messages.push({ 
+              role: 'user', 
+              content: userMessageContent 
+            });
+            
             // 将视频分析结果作为AI回答返回
             const analysisResult = typeof toolResult.content === 'object' 
               ? toolResult.content.analysis || JSON.stringify(toolResult.content)
@@ -208,6 +240,7 @@ export class QwenProvider extends BaseProvider {
             });
             
             console.log(`[QwenProvider] 视频分析结果已保存到messages历史，当前历史长度: ${this.messages.length}`);
+            console.log(`[QwenProvider] 用户消息包含字幕信息，长度: ${userMessageContent.length} 字符`);
             console.log(`[QwenProvider] 最新助手消息预览: ${analysisResult.substring(0, 100)}...`);
             
             // 逐字输出分析结果
@@ -224,6 +257,11 @@ export class QwenProvider extends BaseProvider {
             console.error('[QwenProvider] 视频理解失败:', toolResult);
             
             this.messages.push({
+              role: 'user',
+              content: question
+            });
+            
+            this.messages.push({
               role: 'assistant',
               content: errorMessage
             });
@@ -236,6 +274,11 @@ export class QwenProvider extends BaseProvider {
         } catch (error) {
           console.error('[QwenProvider] 视频理解工具执行异常:', error);
           const errorMessage = `视频分析过程中出现异常: ${error instanceof Error ? error.message : '未知错误'}`;
+          
+          this.messages.push({
+            role: 'user',
+            content: question
+          });
           
           this.messages.push({
             role: 'assistant',
@@ -988,5 +1031,14 @@ export class QwenProvider extends BaseProvider {
     
     // 调用基类销毁方法
     super.destroy();
+  }
+
+  /**
+   * 格式化时间（秒转为 mm:ss 格式）
+   */
+  private formatTime(seconds: number): string {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
 }

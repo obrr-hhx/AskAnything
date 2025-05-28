@@ -511,7 +511,7 @@ export async function understandVideo(toolArg: any): Promise<ToolResponse> {
         if (result.choices && result.choices[0]) {
             const analysis = result.choices[0].message.content;
             
-            // 构建结果对象
+            // 构建结果对象，包含完整的字幕信息
             const analysisResult = {
                 title: videoInfo.title,
                 duration: BilibiliVideoService.formatTime(videoInfo.duration),
@@ -520,7 +520,15 @@ export async function understandVideo(toolArg: any): Promise<ToolResponse> {
                 video_url: video_url,
                 analysis_type: analysis_type,
                 has_subtitles: subtitles.length > 0,
-                subtitle_count: subtitles.length
+                subtitle_count: subtitles.length,
+                // 新增：完整的字幕信息，用于保存到messages中
+                subtitles: subtitles,
+                video_info: {
+                    title: videoInfo.title,
+                    desc: videoInfo.desc,
+                    duration: videoInfo.duration,
+                    owner: videoInfo.owner
+                }
             };
 
             return {
