@@ -460,6 +460,27 @@ function init() {
     console.error(`[ContentScript][${timestamp}] 监听主题变化失败:`, error);
   }
   
+  // 添加全屏事件监听器
+  try {
+    const fullscreenEvents = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'];
+    fullscreenEvents.forEach(eventName => {
+      document.addEventListener(eventName, () => {
+        const fullscreenTimestamp = new Date().toISOString();
+        const isFullscreen = isPageInFullscreen();
+        const isVideoFS = isVideoFullscreen();
+        console.log(`[ContentScript][${fullscreenTimestamp}] 全屏状态变化 - 全屏: ${isFullscreen}, 视频全屏: ${isVideoFS}`);
+        
+        // 延迟一下确保DOM更新完成
+        setTimeout(() => {
+          enforceFloatingButtonRule();
+        }, 100);
+      });
+    });
+    console.log(`[ContentScript][${timestamp}] 全屏事件监听器已设置`);
+  } catch (error) {
+    console.error(`[ContentScript][${timestamp}] 设置全屏事件监听器失败:`, error);
+  }
+  
   console.log(`[ContentScript][${timestamp}] 初始化完成`);
 }
 
@@ -624,11 +645,43 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 // 浮标显示/隐藏控制
 let sidepanelOpen = false; // 跟踪侧边栏状态
 
+// 添加全屏状态检测
+function isPageInFullscreen(): boolean {
+  return !!(document.fullscreenElement || 
+           (document as any).webkitFullscreenElement || 
+           (document as any).mozFullScreenElement || 
+           (document as any).msFullscreenElement);
+}
+
+// 检测是否有视频在全屏播放
+function isVideoFullscreen(): boolean {
+  const fullscreenElement = document.fullscreenElement || 
+                           (document as any).webkitFullscreenElement || 
+                           (document as any).mozFullScreenElement || 
+                           (document as any).msFullscreenElement;
+  
+  if (!fullscreenElement) return false;
+  
+  // 检查全屏元素是否是视频或包含视频
+  return fullscreenElement.tagName === 'VIDEO' || 
+         fullscreenElement.querySelector('video') !== null ||
+         fullscreenElement.classList.contains('html5-video-player') || // YouTube特殊类名
+         fullscreenElement.id === 'movie_player'; // YouTube播放器ID
+}
+
 function showFloatingButton() {
   const fab = document.getElementById('ai-sidepanel-fab');
   if (fab) {
+    // 添加全屏检测日志
+    const isFullscreen = isPageInFullscreen();
+    const isVideoFS = isVideoFullscreen();
+    console.log(`[ContentScript] showFloatingButton - 侧边栏状态: ${sidepanelOpen}, 全屏状态: ${isFullscreen}, 视频全屏: ${isVideoFS}`);
+    
     if (sidepanelOpen) {
       console.log('[ContentScript] 侧边栏开启中，拒绝显示浮标');
+      fab.style.display = 'none';
+    } else if (isFullscreen || isVideoFS) {
+      console.log('[ContentScript] 检测到全屏状态，隐藏浮标');
       fab.style.display = 'none';
     } else {
       fab.style.display = 'flex';
@@ -650,14 +703,18 @@ function enforceFloatingButtonRule() {
   const fab = document.getElementById('ai-sidepanel-fab');
   if (!fab) return;
   
-  const shouldShow = !sidepanelOpen;
+  const isFullscreen = isPageInFullscreen();
+  const isVideoFS = isVideoFullscreen();
+  const shouldShow = !sidepanelOpen && !isFullscreen && !isVideoFS;
   const isCurrentlyShowing = fab.style.display !== 'none';
   
+  console.log(`[ContentScript] enforceFloatingButtonRule - 侧边栏: ${sidepanelOpen}, 全屏: ${isFullscreen}, 视频全屏: ${isVideoFS}, 应该显示: ${shouldShow}, 当前显示: ${isCurrentlyShowing}`);
+  
   if (shouldShow && !isCurrentlyShowing) {
-    console.log('[ContentScript] 强制规则：侧边栏关闭，浮标必须显示');
+    console.log('[ContentScript] 强制规则：条件满足，浮标必须显示');
     fab.style.display = 'flex';
   } else if (!shouldShow && isCurrentlyShowing) {
-    console.log('[ContentScript] 强制规则：侧边栏开启，浮标必须隐藏');
+    console.log('[ContentScript] 强制规则：条件不满足，浮标必须隐藏');
     fab.style.display = 'none';
   }
 }
